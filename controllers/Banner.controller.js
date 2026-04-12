@@ -1,16 +1,10 @@
 const { cloudinary } = require("../config/cloudinary");
-const BannerModel = require("../models/Banner.model"); // updated model
+const BannerModel = require("../models/Banner.model");
 
-// Create / Update Banner (single document for all banners)
+// Create / Update Banner
 const createOrUpdateBanner = async (req, res) => {
   try {
-    const {
-      homeBanner1,
-      homeBanner2,
-      homeBanner3,
-      homeBanner4,
-      advertiseBanners,
-    } = req.body;
+    const { homeBanner1 } = req.body;
 
     let updateData = {};
 
@@ -18,33 +12,13 @@ const createOrUpdateBanner = async (req, res) => {
       const result = await cloudinary.uploader.upload(image, {
         folder,
         resource_type: "image",
-        type: "upload", // ✅ FORCE PUBLIC
+        type: "upload",
       });
       return result.secure_url;
     };
 
     if (homeBanner1) {
       updateData.homeBanner1 = await uploadImage(homeBanner1, "Banners/Home");
-    }
-
-    if (homeBanner2) {
-      updateData.homeBanner2 = await uploadImage(homeBanner2, "Banners/Home");
-    }
-
-    if (homeBanner3) {
-      updateData.homeBanner3 = await uploadImage(homeBanner3, "Banners/Home");
-    }
-
-    if (homeBanner4) {
-      updateData.homeBanner4 = await uploadImage(homeBanner4, "Banners/Home");
-    }
-
-    if (advertiseBanners && advertiseBanners.length > 0) {
-      updateData.advertiseBanners = [];
-      for (const ad of advertiseBanners) {
-        const url = await uploadImage(ad, "Banners/Advertise");
-        updateData.advertiseBanners.push(url);
-      }
     }
 
     let banner = await BannerModel.findOne();
@@ -58,7 +32,7 @@ const createOrUpdateBanner = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Banners saved successfully",
+      message: "Banner saved successfully",
       banner,
     });
   } catch (error) {
@@ -71,13 +45,13 @@ const createOrUpdateBanner = async (req, res) => {
   }
 };
 
-// Get Banner (always returns single document)
+// Get Banner
 const getBanner = async (req, res) => {
   try {
     const banner = await BannerModel.findOne();
 
     if (!banner) {
-      return res.status(404).json({ message: "No banners found" });
+      return res.status(404).json({ message: "No banner found" });
     }
 
     res.status(200).json({
@@ -88,25 +62,27 @@ const getBanner = async (req, res) => {
     console.error("Error in getBanner:", error);
     res.status(500).json({
       success: false,
-      message: "Server error while fetching banners",
+      message: "Server error while fetching banner",
       error: error.message,
     });
   }
 };
 
-// Delete all banners (optional)
+// Delete Banner
 const deleteBanners = async (req, res) => {
   try {
     await BannerModel.deleteMany({});
     res.status(200).json({
       success: true,
-      message: "All banners deleted successfully",
+      message: "Banner deleted successfully",
     });
   } catch (error) {
     console.error("Error in deleteBanners:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
   }
 };
 

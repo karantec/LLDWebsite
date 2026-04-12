@@ -22,8 +22,8 @@ const Category = require("./routes/category.routes");
 const Products = require("./routes/product.routes");
 const SubCategory = require("./routes/subCategory.routes");
 const Cart = require("./routes/cart.routes");
-const Vendor = require("./routes/vender.routes");
-const Order = require("./routes/order.routes");
+// const Vendor = require("./routes/vender.routes");
+// const Order = require("./routes/order.routes");
 /* =======================
    Middleware
 ======================= */
@@ -49,9 +49,9 @@ app.use("/api/ads", Banner);
 app.use("/api/category", Category);
 app.use("/api/subcategory", SubCategory);
 app.use("/api/product", Products);
-app.use("/api/vendor", Vendor);
+// app.use("/api/vendor", Vendor);
 app.use("/api/cart", Cart);
-app.use("/api/order", Order);
+// app.use("/api/order", Order);
 app.use("/api/payment", paymentRoutes);
 
 /* =======================

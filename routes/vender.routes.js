@@ -51,7 +51,7 @@ router.post("/login", loginVendor);
 
 /* ================= VENDOR PROFILE (self) ================= */
 
-router.get("/profile/me", protectVendor, getMyVendorProfile);
+// router.get("/profile/me", protectVendor, getMyVendorProfile);
 router.put("/profile/me", protectVendor, acceptedVendorOnly, updateVendor);
 
 /* ================= VENDOR MANAGEMENT (admin) ================= */

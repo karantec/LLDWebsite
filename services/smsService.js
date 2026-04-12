@@ -1,53 +1,40 @@
-const axios = require("axios");
+const twilio = require("twilio");
 
 class SMSService {
+  static client = twilio(
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_AUTH_TOKEN,
+  );
+
+  // Format phone to +91XXXXXXXXXX
   static formatPhoneNumber(phoneNumber) {
     const cleaned = phoneNumber.replace(/\D/g, "");
-    return cleaned.slice(-10);
+    return `+91${cleaned.slice(-10)}`;
   }
 
   static async sendOTP(phoneNumber, otp) {
     try {
-      const url = "http://103.231.100.41/websms/sendsms.aspx";
+      const formattedPhone = this.formatPhoneNumber(phoneNumber);
 
-      const USERID = "minutos";
-      const PASSWORD = "125PPhD";
-      const SENDER = "ITMINE";
-      const PEID = "1701158036727349102";
-      const TPID = "1707172656144467326";
+      const message = await this.client.messages.create({
+        body: `Dear User, Your OTP is ${otp}. Valid for 3 minutes. Do not share it.`,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: formattedPhone,
+      });
 
-      // ✅ MUST MATCH TEMPLATE EXACTLY
-      const message = `Dear User,
-Your OTP for Login is ${otp} This OTP is valid for 3 minutes.
-Please do not share OTP with anyone.
+      console.log("Twilio Message SID:", message.sid);
 
-INTECH`;
-
-      const encodedMessage = encodeURIComponent(message);
-
-      const finalUrl =
-        `${url}?userid=${USERID}` +
-        `&password=${PASSWORD}` +
-        `&sender=${SENDER}` +
-        `&mobileno=${phoneNumber}` +
-        `&msg=${encodedMessage}` +
-        `&peid=${PEID}` +
-        `&tpid=${TPID}`;
-
-      console.log("FINAL SMS URL:", finalUrl);
-
-      const { data } = await axios.get(finalUrl);
-
-      console.log("SMS Response:", data);
-
-      if (String(data).toLowerCase().includes("success")) {
-        return { success: true, raw: data };
-      }
-
-      return { success: false, raw: data };
+      return {
+        success: true,
+        sid: message.sid,
+      };
     } catch (err) {
-      console.error("SMS Error:", err.message);
-      return { success: false, error: err.message };
+      console.error("Twilio Error:", err.message);
+
+      return {
+        success: false,
+        error: err.message,
+      };
     }
   }
 }
