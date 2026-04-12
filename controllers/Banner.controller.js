@@ -1,25 +1,32 @@
 const { cloudinary } = require("../config/cloudinary");
 const BannerModel = require("../models/Banner.model");
 
+// Helper — upload only if it's a new base64/remote URL, skip if already a cloudinary URL
+const uploadImage = async (image, folder) => {
+  // If already uploaded to cloudinary, return as-is
+  if (image.startsWith("https://res.cloudinary.com")) return image;
+
+  const result = await cloudinary.uploader.upload(image, {
+    folder,
+    resource_type: "image",
+    type: "upload",
+  });
+  return result.secure_url;
+};
+
 // Create / Update Banner
 const createOrUpdateBanner = async (req, res) => {
   try {
-    const { homeBanner1 } = req.body;
+    const { homeBanner1, homeBanner2, homeBanner3 } = req.body;
 
-    let updateData = {};
+    const updateData = {};
 
-    const uploadImage = async (image, folder) => {
-      const result = await cloudinary.uploader.upload(image, {
-        folder,
-        resource_type: "image",
-        type: "upload",
-      });
-      return result.secure_url;
-    };
-
-    if (homeBanner1) {
+    if (homeBanner1)
       updateData.homeBanner1 = await uploadImage(homeBanner1, "Banners/Home");
-    }
+    if (homeBanner2)
+      updateData.homeBanner2 = await uploadImage(homeBanner2, "Banners/Home");
+    if (homeBanner3)
+      updateData.homeBanner3 = await uploadImage(homeBanner3, "Banners/Home");
 
     let banner = await BannerModel.findOne();
     if (banner) {
@@ -32,7 +39,7 @@ const createOrUpdateBanner = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Banner saved successfully",
+      message: "Banners saved successfully",
       banner,
     });
   } catch (error) {
@@ -74,7 +81,7 @@ const deleteBanners = async (req, res) => {
     await BannerModel.deleteMany({});
     res.status(200).json({
       success: true,
-      message: "Banner deleted successfully",
+      message: "Banners deleted successfully",
     });
   } catch (error) {
     console.error("Error in deleteBanners:", error);
