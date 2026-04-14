@@ -3,91 +3,86 @@ const Product = require("../models/Product.model");
 const Category = require("../models/Category.model");
 const SubCategory = require("../models/subCategory.model");
 
-// ✅ Create Product
-const createProduct = async (req, res) => {
-  try {
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({
-        message:
-          "Request body is empty or invalid. Make sure you're sending JSON data.",
-      });
-    }
-
-    const productData = req.body;
-
-    // Validate required fields
-    const requiredFields = ["name", "category", "subCategory"];
-    const missingFields = requiredFields.filter((f) => !productData[f]);
-    if (missingFields.length > 0) {
-      return res.status(400).json({
-        message: `The following fields are required: ${missingFields.join(", ")}`,
-        missingFields,
-      });
-    }
-
-    // Validate category (single ObjectId)
-    if (!mongoose.Types.ObjectId.isValid(productData.category)) {
-      return res.status(400).json({ message: "Invalid category ID" });
-    }
-    const categoryExists = await Category.findById(productData.category);
-    if (!categoryExists) {
-      return res.status(400).json({ message: "Category not found" });
-    }
-
-    // Validate subCategory (single ObjectId)
-    if (!mongoose.Types.ObjectId.isValid(productData.subCategory)) {
-      return res.status(400).json({ message: "Invalid subCategory ID" });
-    }
-    const subCategoryExists = await SubCategory.findById(
-      productData.subCategory,
-    );
-    if (!subCategoryExists) {
-      return res.status(400).json({ message: "SubCategory not found" });
-    }
-
-    // Validate customizations if provided
-    if (
-      productData.customizations &&
-      !Array.isArray(productData.customizations)
-    ) {
-      return res
-        .status(400)
-        .json({ message: "customizations must be an array" });
-    }
-
-    // Validate media if provided
-    if (productData.media && !Array.isArray(productData.media)) {
-      return res.status(400).json({ message: "media must be an array" });
-    }
-
-    const product = await Product.create(productData);
-
-    const populatedProduct = await Product.findById(product._id)
-      .populate("category", "name")
-      .populate("subCategory", "name");
-
-    return res.status(201).json({
-      success: true,
-      message: "Product created successfully",
-      product: populatedProduct,
-    });
-  } catch (error) {
-    console.error("Error creating product:", error);
-    return res
-      .status(500)
-      .json({ message: "Internal server error", error: error.message });
+//
+// 🔹 VALIDATION FUNCTION (UPDATED)
+//
+const validateCustomizations = (customizations) => {
+  if (!Array.isArray(customizations)) {
+    return "customizations must be an array";
   }
+
+  const allowedTypes = [
+    "radio",
+    "checkbox",
+    "dropdown",
+    "text",
+    "textarea",
+    "file",
+  ];
+
+  for (let c of customizations) {
+    if (!c.id || !c.label || !c.type) {
+      return "Each customization must have id, label, type";
+    }
+
+    if (!allowedTypes.includes(c.type)) {
+      return `Invalid customization type: ${c.type}`;
+    }
+
+    // ✅ Options validation
+    if (
+      ["radio", "checkbox", "dropdown"].includes(c.type) &&
+      (!c.options || c.options.length === 0)
+    ) {
+      return `Options required for ${c.type}`;
+    }
+
+    // ✅ File validation
+    if (c.type === "file") {
+      if (c.required && (!c.files || c.files.length === 0)) {
+        return `${c.label} is required`;
+      }
+
+      if (c.files && !Array.isArray(c.files)) {
+        return `files must be array in ${c.label}`;
+      }
+    }
+
+    // ✅ Value validation
+    if (c.type !== "file") {
+      if (c.required && (c.value === null || c.value === "")) {
+        return `${c.label} is required`;
+      }
+    }
+  }
+
+  return null;
 };
 
-// ✅ Get All Products
-const getAllProducts = async (req, res) => {
+//
+// 🔹 NORMALIZE CUSTOMIZATION DATA
+//
+const normalizeCustomizations = (customizations) => {
+  return customizations.map((c) => ({
+    ...c,
+    files: c.files || [],
+    value: c.value ?? null,
+  }));
+};
+
+//
+// 🔹 GET PRODUCTS BY SUBCATEGORIES (MISSING FUNCTION - FIXED)
+//
+exports.getProductsBySubCategories = async (req, res) => {
   try {
-    // Optional filters via query params
-    const filter = {};
-    if (req.query.category) filter.category = req.query.category;
-    if (req.query.subCategory) filter.subCategory = req.query.subCategory;
-    if (req.query.popular) filter.popular = req.query.popular === "true";
-    if (req.query.active) filter.active = req.query.active === "true";
+    const { subCategories } = req.query;
+
+    let filter = {};
+
+    if (subCategories) {
+      const subCategoryArray = subCategories.split(",");
+      filter.subCategory = { $in: subCategoryArray };
+    }
 
     const products = await Product.find(filter)
       .populate("category", "name")
@@ -96,17 +91,145 @@ const getAllProducts = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      total: products.length,
+      count: products.length,
       data: products,
     });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Internal Server Error" });
+  } catch (error) {
+    console.error("Get Products By SubCategories Error:", error);
+    return res.status(500).json({ message: error.message });
   }
 };
 
-// ✅ Get Product by ID
-const getProductById = async (req, res) => {
+//
+// 🔹 CREATE PRODUCT
+//
+exports.createProduct = async (req, res) => {
+  try {
+    const data = req.body;
+
+    // ✅ Required fields
+    const requiredFields = ["name", "category", "subCategory", "price"];
+    const missing = requiredFields.filter((f) => !data[f]);
+
+    if (missing.length) {
+      return res.status(400).json({
+        message: `Missing fields: ${missing.join(", ")}`,
+      });
+    }
+
+    // ✅ Category check
+    if (!mongoose.Types.ObjectId.isValid(data.category)) {
+      return res.status(400).json({ message: "Invalid category ID" });
+    }
+
+    const categoryExists = await Category.findById(data.category);
+    if (!categoryExists) {
+      return res.status(400).json({ message: "Category not found" });
+    }
+
+    // ✅ SubCategory check
+    if (!mongoose.Types.ObjectId.isValid(data.subCategory)) {
+      return res.status(400).json({ message: "Invalid subCategory ID" });
+    }
+
+    const subCategoryExists = await SubCategory.findById(data.subCategory);
+    if (!subCategoryExists) {
+      return res.status(400).json({ message: "SubCategory not found" });
+    }
+
+    // 🔥 Customizations
+    if (data.customizations) {
+      data.customizations = normalizeCustomizations(data.customizations);
+
+      const error = validateCustomizations(data.customizations);
+      if (error) return res.status(400).json({ message: error });
+    }
+
+    // ✅ Media validation
+    if (data.media && !Array.isArray(data.media)) {
+      return res.status(400).json({ message: "media must be an array" });
+    }
+
+    // ✅ SuperTags validation
+    if (data.superTags && data.superTags.length > 5) {
+      return res.status(400).json({
+        message: "Maximum 5 superTags allowed",
+      });
+    }
+
+    // ✅ Create
+    const product = await Product.create(data);
+
+    const populated = await Product.findById(product._id)
+      .populate("category", "name")
+      .populate("subCategory", "name");
+
+    return res.status(201).json({
+      success: true,
+      message: "Product created successfully",
+      product: populated,
+    });
+  } catch (error) {
+    console.error("Create Product Error:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+//
+// 🔹 GET ALL PRODUCTS
+//
+exports.getAllProducts = async (req, res) => {
+  try {
+    const {
+      category,
+      subCategory,
+      popular,
+      active,
+      search,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const filter = {};
+
+    if (category) filter.category = category;
+    if (subCategory) filter.subCategory = subCategory;
+    if (popular) filter.popular = popular === "true";
+    if (active) filter.active = active === "true";
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { productName: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const products = await Product.find(filter)
+      .populate("category", "name")
+      .populate("subCategory", "name")
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .sort({ createdAt: -1 });
+
+    const total = await Product.countDocuments(filter);
+
+    return res.status(200).json({
+      success: true,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      data: products,
+    });
+  } catch (error) {
+    console.error("Get All Products Error:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+//
+// 🔹 GET PRODUCT BY ID
+//
+exports.getProductById = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -122,67 +245,41 @@ const getProductById = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    return res.status(200).json({
-      success: true,
-      message: "Product retrieved successfully",
-      product,
-    });
+    return res.status(200).json({ success: true, product });
   } catch (error) {
-    console.error("Error fetching product:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error("Get Product By ID Error:", error);
+    return res.status(500).json({ message: error.message });
   }
 };
 
-// ✅ Update Product
-const updateProduct = async (req, res) => {
+//
+// 🔹 UPDATE PRODUCT
+//
+exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const data = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid product ID" });
     }
 
-    // Validate category if updating
-    if (updateData.category) {
-      if (!mongoose.Types.ObjectId.isValid(updateData.category)) {
-        return res.status(400).json({ message: "Invalid category ID" });
-      }
-      const categoryExists = await Category.findById(updateData.category);
-      if (!categoryExists) {
-        return res.status(400).json({ message: "Category not found" });
-      }
+    // 🔥 Customizations
+    if (data.customizations) {
+      data.customizations = normalizeCustomizations(data.customizations);
+
+      const error = validateCustomizations(data.customizations);
+      if (error) return res.status(400).json({ message: error });
     }
 
-    // Validate subCategory if updating
-    if (updateData.subCategory) {
-      if (!mongoose.Types.ObjectId.isValid(updateData.subCategory)) {
-        return res.status(400).json({ message: "Invalid subCategory ID" });
-      }
-      const subCategoryExists = await SubCategory.findById(
-        updateData.subCategory,
-      );
-      if (!subCategoryExists) {
-        return res.status(400).json({ message: "SubCategory not found" });
-      }
+    // ✅ SuperTags validation
+    if (data.superTags && data.superTags.length > 5) {
+      return res.status(400).json({
+        message: "Maximum 5 superTags allowed",
+      });
     }
 
-    // Validate customizations if updating
-    if (
-      updateData.customizations &&
-      !Array.isArray(updateData.customizations)
-    ) {
-      return res
-        .status(400)
-        .json({ message: "customizations must be an array" });
-    }
-
-    // Validate media if updating
-    if (updateData.media && !Array.isArray(updateData.media)) {
-      return res.status(400).json({ message: "media must be an array" });
-    }
-
-    const product = await Product.findByIdAndUpdate(id, updateData, {
+    const product = await Product.findByIdAndUpdate(id, data, {
       new: true,
       runValidators: true,
     })
@@ -199,15 +296,15 @@ const updateProduct = async (req, res) => {
       product,
     });
   } catch (error) {
-    console.error("Error updating product:", error);
-    return res
-      .status(500)
-      .json({ message: "Internal server error", error: error.message });
+    console.error("Update Product Error:", error);
+    return res.status(500).json({ message: error.message });
   }
 };
 
-// ✅ Delete Product
-const deleteProduct = async (req, res) => {
+//
+// 🔹 DELETE PRODUCT
+//
+exports.deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -224,130 +321,93 @@ const deleteProduct = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Product deleted successfully",
-      product,
     });
   } catch (error) {
-    console.error("Error deleting product:", error);
-    return res.status(500).json({ message: "Internal server error" });
-  }
-};
-
-// ✅ Category wise products
-const categoryWiseProduct = async (req, res) => {
-  try {
-    const { category } = req.body;
-
-    if (!category) {
-      return res.status(400).json({ message: "Category is required" });
-    }
-
-    // Support both ObjectId and name lookup
-    let categoryDoc;
-    if (mongoose.Types.ObjectId.isValid(category)) {
-      categoryDoc = await Category.findById(category);
-    } else {
-      categoryDoc = await Category.findOne({ name: category });
-    }
-
-    if (!categoryDoc) {
-      return res.status(404).json({ message: "Category not found" });
-    }
-
-    const products = await Product.find({ category: categoryDoc._id })
-      .populate("category", "name")
-      .populate("subCategory", "name")
-      .sort({ createdAt: -1 });
-
-    return res.status(200).json({
-      success: true,
-      message: "Category wise products fetched",
-      count: products.length,
-      data: products,
-    });
-  } catch (error) {
+    console.error("Delete Product Error:", error);
     return res.status(500).json({ message: error.message });
   }
 };
 
-// ✅ SubCategory wise products
-const getProductsBySubCategories = async (req, res) => {
+//
+// 🔹 GET PRODUCTS BY CATEGORY
+//
+exports.getProductsByCategory = async (req, res) => {
   try {
-    let { subCategories } = req.query;
+    const { categoryId } = req.params;
 
-    if (!subCategories) {
-      return res
-        .status(400)
-        .json({ message: "subCategories query is required" });
+    if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+      return res.status(400).json({ message: "Invalid category ID" });
     }
 
-    if (typeof subCategories === "string") {
-      subCategories = subCategories.split(",").map((s) => s.trim());
-    }
-
-    const isObjectId = (id) => /^[0-9a-fA-F]{24}$/.test(id);
-
-    let query;
-    if (subCategories.every(isObjectId)) {
-      query = {
-        subCategory: {
-          $in: subCategories.map((id) => new mongoose.Types.ObjectId(id)),
-        },
-      };
-    } else {
-      // Lookup by name
-      const subCategoryDocs = await SubCategory.find({
-        name: { $in: subCategories },
-      });
-      const ids = subCategoryDocs.map((s) => s._id);
-      if (!ids.length) {
-        return res
-          .status(404)
-          .json({ message: "No matching subCategories found" });
-      }
-      query = { subCategory: { $in: ids } };
-    }
-
-    const products = await Product.find(query)
-      .populate("category", "name")
-      .populate("subCategory", "name")
-      .sort({ createdAt: -1 });
-
-    return res.status(200).json({
-      success: true,
-      message: "Products fetched successfully",
-      total: products.length,
-      data: products,
-    });
-  } catch (error) {
-    console.error("Error fetching products by subCategories:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
-  }
-};
-
-// ✅ Get Popular Products
-const getPopularProducts = async (req, res) => {
-  try {
-    const products = await Product.find({ popular: true, active: true })
+    const products = await Product.find({ category: categoryId, active: true })
       .populate("category", "name")
       .populate("subCategory", "name")
       .sort({ rating: -1 });
 
-    return res.status(200).json({
-      success: true,
-      total: products.length,
-      data: products,
-    });
+    return res
+      .status(200)
+      .json({ success: true, count: products.length, data: products });
   } catch (error) {
+    console.error("Get Products By Category Error:", error);
     return res.status(500).json({ message: error.message });
   }
 };
 
-// ✅ Toggle Product Active Status
-const toggleProductStatus = async (req, res) => {
+//
+// 🔹 GET PRODUCTS BY SUBCATEGORY
+//
+exports.getProductsBySubCategory = async (req, res) => {
+  try {
+    const { subCategoryId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(subCategoryId)) {
+      return res.status(400).json({ message: "Invalid subCategory ID" });
+    }
+
+    const products = await Product.find({
+      subCategory: subCategoryId,
+      active: true,
+    })
+      .populate("category", "name")
+      .populate("subCategory", "name")
+      .sort({ rating: -1 });
+
+    return res
+      .status(200)
+      .json({ success: true, count: products.length, data: products });
+  } catch (error) {
+    console.error("Get Products By SubCategory Error:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+//
+// 🔹 GET POPULAR PRODUCTS
+//
+exports.getPopularProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      popular: true,
+      active: true,
+    })
+      .populate("category", "name")
+      .populate("subCategory", "name")
+      .sort({ rating: -1 })
+      .limit(10);
+
+    return res
+      .status(200)
+      .json({ success: true, count: products.length, data: products });
+  } catch (error) {
+    console.error("Get Popular Products Error:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+//
+// 🔹 TOGGLE ACTIVE STATUS
+//
+exports.toggleProductStatus = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -356,6 +416,7 @@ const toggleProductStatus = async (req, res) => {
     }
 
     const product = await Product.findById(id);
+
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
@@ -365,22 +426,11 @@ const toggleProductStatus = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `Product ${product.active ? "activated" : "deactivated"} successfully`,
       active: product.active,
+      message: `Product ${product.active ? "activated" : "deactivated"} successfully`,
     });
   } catch (error) {
+    console.error("Toggle Product Status Error:", error);
     return res.status(500).json({ message: error.message });
   }
-};
-
-module.exports = {
-  createProduct,
-  getAllProducts,
-  getProductById,
-  updateProduct,
-  deleteProduct,
-  categoryWiseProduct,
-  getProductsBySubCategories,
-  getPopularProducts,
-  toggleProductStatus,
 };
