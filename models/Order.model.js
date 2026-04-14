@@ -1,5 +1,8 @@
 const mongoose = require("mongoose");
 
+//
+// 🔹 Order Item Snapshot (IMPORTANT)
+//
 const OrderItemSchema = new mongoose.Schema(
   {
     product: {
@@ -8,12 +11,22 @@ const OrderItemSchema = new mongoose.Schema(
       required: true,
     },
     name: String,
-    price: Number,
+    image: String,
+    unit: String,
+
+    mrp: Number,
+    sellingPrice: Number,
+    discount: Number,
+
     quantity: Number,
+    lineTotal: Number,
   },
   { _id: false },
 );
 
+//
+// 🔹 Address Schema
+//
 const AddressSchema = new mongoose.Schema(
   {
     name: String,
@@ -26,22 +39,50 @@ const AddressSchema = new mongoose.Schema(
   { _id: false },
 );
 
-// 🔹 NEW: Payment sub-schema
+//
+// 🔹 Razorpay Payment Schema
+//
 const PaymentSchema = new mongoose.Schema(
   {
+    method: {
+      type: String,
+      enum: ["COD", "ONLINE"],
+      required: true,
+    },
+
     status: {
       type: String,
-      enum: ["NOT_INITIATED", "PENDING", "PAID", "FAILED", "REFUNDED"],
+      enum: [
+        "NOT_INITIATED",
+        "CREATED", // Razorpay order created
+        "PENDING",
+        "PAID",
+        "FAILED",
+        "REFUNDED",
+      ],
       default: "NOT_INITIATED",
     },
-    razorpayOrderId: { type: String, default: null }, // created on Step 1
-    razorpayPaymentId: { type: String, default: null }, // filled after success
-    razorpaySignature: { type: String, default: null }, // filled after verify
+
+    razorpayOrderId: { type: String, default: null },
+    razorpayPaymentId: { type: String, default: null },
+    razorpaySignature: { type: String, default: null },
+
+    amount: { type: Number, required: true },
+
+    currency: { type: String, default: "INR" },
+
     paidAt: { type: Date, default: null },
+    failedReason: { type: String, default: null },
+
+    refundId: { type: String, default: null },
+    refundAmount: { type: Number, default: null },
   },
   { _id: false },
 );
 
+//
+// 🔹 Main Order Schema
+//
 const OrderSchema = new mongoose.Schema(
   {
     user: {
@@ -49,30 +90,42 @@ const OrderSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    vendor: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Vendor",
-      required: true,
-    },
+
     items: {
       type: [OrderItemSchema],
       required: true,
     },
-    totalAmount: {
-      type: Number,
-      required: true,
-    },
+
+    // 💰 Pricing snapshot
+    subTotal: { type: Number, required: true },
+    deliveryFee: { type: Number, default: 0 },
+    totalAmount: { type: Number, required: true },
+
+    // 📍 Address
     shippingAddress: AddressSchema,
+
+    // 📦 Order lifecycle
     status: {
       type: String,
-      enum: ["PLACED", "ACCEPTED", "REJECTED", "COMPLETED"],
+      enum: [
+        "PLACED",
+        "CONFIRMED",
+        "SHIPPED",
+        "OUT_FOR_DELIVERY",
+        "DELIVERED",
+        "CANCELLED",
+      ],
       default: "PLACED",
     },
-    // 🔹 NEW: Embedded payment info
+
+    // 💳 Payment info
     payment: {
       type: PaymentSchema,
-      default: () => ({}),
+      required: true,
     },
+
+    // 🧾 Optional metadata
+    notes: { type: String, default: "" },
   },
   { timestamps: true },
 );

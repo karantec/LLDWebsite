@@ -1,22 +1,22 @@
 const router = require("express").Router();
 const orderCtrl = require("../controllers/order.controller");
 
-const {
-  protect,
-  protectVendor,
-  admin,
-} = require("../middleware/auth.middleware");
+const { protect, admin } = require("../middleware/auth.middleware");
 
-// USER
+//
+// 🔹 USER ROUTES
+//
 router.post("/create", protect, orderCtrl.createOrder);
+router.post("/verify-payment", protect, orderCtrl.verifyPayment);
+router.post("/payment-failed", protect, orderCtrl.paymentFailed);
+
 router.get("/my-orders", protect, orderCtrl.getMyOrders);
 router.get("/:id", protect, orderCtrl.getOrder);
 
-// VENDOR
-router.get("/vendor/orders", protectVendor, orderCtrl.getVendorOrders);
-router.put("/vendor/:id/status", protectVendor, orderCtrl.updateOrderStatus);
-
-// ADMIN
-router.get("/admin/all", orderCtrl.getAllOrders);
+//
+// 🔹 ADMIN ROUTES
+//
+router.get("/admin/all", protect, admin, orderCtrl.getAllOrders);
+router.put("/admin/:id/status", protect, admin, orderCtrl.updateOrderStatus);
 
 module.exports = router;

@@ -34,11 +34,5 @@ router.put("/:id", protect, admin, updateSubcategory);
 
 // Delete
 router.delete("/:id", protect, admin, deleteSubcategory);
-//bulk upload
-// router.post(
-//   "/subcategories/bulk-upload",
-//   upload.single("file"),
-//   bulkUploadSubcategories
-// );
 
 module.exports = router;
