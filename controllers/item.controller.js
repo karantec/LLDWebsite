@@ -3,9 +3,9 @@ const Product = require("../models/Product.model");
 const Category = require("../models/Category.model");
 const SubCategory = require("../models/subCategory.model");
 
-//
-// 🔹 VALIDATION FUNCTION (UPDATED)
-//
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔹 VALIDATE CUSTOMIZATIONS
+// ─────────────────────────────────────────────────────────────────────────────
 const validateCustomizations = (customizations) => {
   if (!Array.isArray(customizations)) {
     return "customizations must be an array";
@@ -20,7 +20,7 @@ const validateCustomizations = (customizations) => {
     "file",
   ];
 
-  for (let c of customizations) {
+  for (const c of customizations) {
     if (!c.id || !c.label || !c.type) {
       return "Each customization must have id, label, type";
     }
@@ -29,29 +29,45 @@ const validateCustomizations = (customizations) => {
       return `Invalid customization type: ${c.type}`;
     }
 
-    // ✅ Options validation
-    if (
-      ["radio", "checkbox", "dropdown"].includes(c.type) &&
-      (!c.options || c.options.length === 0)
-    ) {
-      return `Options required for ${c.type}`;
+    // ✅ Options validation for choice-based types
+    if (["radio", "checkbox", "dropdown"].includes(c.type)) {
+      if (!c.options || c.options.length === 0) {
+        return `Options required for ${c.type} in "${c.label}"`;
+      }
+
+      for (const opt of c.options) {
+        // Each option must be { label, priceAdjustment }
+        if (
+          !opt.label ||
+          typeof opt.label !== "string" ||
+          opt.label.trim() === ""
+        ) {
+          return `Each option in "${c.label}" must have a non-empty label`;
+        }
+
+        if (
+          opt.priceAdjustment !== undefined &&
+          typeof opt.priceAdjustment !== "number"
+        ) {
+          return `priceAdjustment in "${c.label}" → "${opt.label}" must be a number`;
+        }
+      }
     }
 
     // ✅ File validation
     if (c.type === "file") {
       if (c.required && (!c.files || c.files.length === 0)) {
-        return `${c.label} is required`;
+        return `"${c.label}" is required`;
       }
-
       if (c.files && !Array.isArray(c.files)) {
-        return `files must be array in ${c.label}`;
+        return `files must be an array in "${c.label}"`;
       }
     }
 
-    // ✅ Value validation
+    // ✅ Value validation for non-file types
     if (c.type !== "file") {
       if (c.required && (c.value === null || c.value === "")) {
-        return `${c.label} is required`;
+        return `"${c.label}" is required`;
       }
     }
   }
@@ -59,29 +75,62 @@ const validateCustomizations = (customizations) => {
   return null;
 };
 
-//
-// 🔹 NORMALIZE CUSTOMIZATION DATA
-//
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔹 NORMALIZE CUSTOMIZATIONS
+//    • Ensures options are always { label, priceAdjustment }
+//    • Accepts legacy plain-string options and auto-converts them
+// ─────────────────────────────────────────────────────────────────────────────
 const normalizeCustomizations = (customizations) => {
   return customizations.map((c) => ({
     ...c,
     files: c.files || [],
     value: c.value ?? null,
+    options: (c.options || []).map((opt) => {
+      // Legacy support: if opt is a plain string, convert it
+      if (typeof opt === "string") {
+        return { label: opt, priceAdjustment: 0 };
+      }
+      return {
+        label: opt.label,
+        priceAdjustment:
+          typeof opt.priceAdjustment === "number" ? opt.priceAdjustment : 0,
+      };
+    }),
   }));
 };
 
-//
-// 🔹 GET PRODUCTS BY SUBCATEGORIES (MISSING FUNCTION - FIXED)
-//
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔹 COMPUTE FINAL PRICE (helper for order/cart use)
+//    selectedOptions: { [customizationId]: string | string[] }
+// ─────────────────────────────────────────────────────────────────────────────
+const computeFinalPrice = (product, selectedOptions = {}) => {
+  let total = product.price;
+
+  for (const customization of product.customizations) {
+    const chosen = selectedOptions[customization.id];
+    if (!chosen) continue;
+
+    const chosenArray = Array.isArray(chosen) ? chosen : [chosen];
+
+    for (const chosenLabel of chosenArray) {
+      const match = customization.options.find((o) => o.label === chosenLabel);
+      if (match) total += match.priceAdjustment;
+    }
+  }
+
+  return Math.max(0, total);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔹 GET PRODUCTS BY SUBCATEGORIES
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getProductsBySubCategories = async (req, res) => {
   try {
     const { subCategories } = req.query;
 
-    let filter = {};
-
+    const filter = {};
     if (subCategories) {
-      const subCategoryArray = subCategories.split(",");
-      filter.subCategory = { $in: subCategoryArray };
+      filter.subCategory = { $in: subCategories.split(",") };
     }
 
     const products = await Product.find(filter)
@@ -89,77 +138,66 @@ exports.getProductsBySubCategories = async (req, res) => {
       .populate("subCategory", "name")
       .sort({ createdAt: -1 });
 
-    return res.status(200).json({
-      success: true,
-      count: products.length,
-      data: products,
-    });
+    return res
+      .status(200)
+      .json({ success: true, count: products.length, data: products });
   } catch (error) {
     console.error("Get Products By SubCategories Error:", error);
     return res.status(500).json({ message: error.message });
   }
 };
 
-//
+// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 CREATE PRODUCT
-//
+// ─────────────────────────────────────────────────────────────────────────────
 exports.createProduct = async (req, res) => {
   try {
     const data = req.body;
 
-    // ✅ Required fields
-    const requiredFields = ["name", "category", "subCategory", "price"];
-    const missing = requiredFields.filter((f) => !data[f]);
-
+    // Required fields
+    const missing = ["name", "category", "subCategory", "price"].filter(
+      (f) => !data[f],
+    );
     if (missing.length) {
-      return res.status(400).json({
-        message: `Missing fields: ${missing.join(", ")}`,
-      });
+      return res
+        .status(400)
+        .json({ message: `Missing fields: ${missing.join(", ")}` });
     }
 
-    // ✅ Category check
+    // Category check
     if (!mongoose.Types.ObjectId.isValid(data.category)) {
       return res.status(400).json({ message: "Invalid category ID" });
     }
-
-    const categoryExists = await Category.findById(data.category);
-    if (!categoryExists) {
+    if (!(await Category.findById(data.category))) {
       return res.status(400).json({ message: "Category not found" });
     }
 
-    // ✅ SubCategory check
+    // SubCategory check
     if (!mongoose.Types.ObjectId.isValid(data.subCategory)) {
       return res.status(400).json({ message: "Invalid subCategory ID" });
     }
-
-    const subCategoryExists = await SubCategory.findById(data.subCategory);
-    if (!subCategoryExists) {
+    if (!(await SubCategory.findById(data.subCategory))) {
       return res.status(400).json({ message: "SubCategory not found" });
     }
 
-    // 🔥 Customizations
+    // Customizations
     if (data.customizations) {
       data.customizations = normalizeCustomizations(data.customizations);
-
       const error = validateCustomizations(data.customizations);
       if (error) return res.status(400).json({ message: error });
     }
 
-    // ✅ Media validation
+    // Media
     if (data.media && !Array.isArray(data.media)) {
       return res.status(400).json({ message: "media must be an array" });
     }
 
-    // ✅ SuperTags validation
+    // SuperTags
     if (data.superTags && data.superTags.length > 5) {
-      return res.status(400).json({
-        message: "Maximum 5 superTags allowed",
-      });
+      return res.status(400).json({ message: "Maximum 5 superTags allowed" });
     }
 
-    // ✅ Create
     const product = await Product.create(data);
-
     const populated = await Product.findById(product._id)
       .populate("category", "name")
       .populate("subCategory", "name");
@@ -175,23 +213,14 @@ exports.createProduct = async (req, res) => {
   }
 };
 
-//
+// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 GET ALL PRODUCTS
-//
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getAllProducts = async (req, res) => {
   try {
-    const {
-      category,
-      subCategory,
-      popular,
-      active,
-      search,
-      page = 1,
-      limit = 10,
-    } = req.query;
+    const { category, subCategory, popular, active, search } = req.query;
 
     const filter = {};
-
     if (category) filter.category = category;
     if (subCategory) filter.subCategory = subCategory;
     if (popular) filter.popular = popular === "true";
@@ -204,31 +233,24 @@ exports.getAllProducts = async (req, res) => {
       ];
     }
 
-    const products = await Product.find(filter)
-      .populate("category", "name")
-      .populate("subCategory", "name")
-      .skip((page - 1) * limit)
-      .limit(Number(limit))
-      .sort({ createdAt: -1 });
+    const [products, total] = await Promise.all([
+      Product.find(filter)
+        .populate("category", "name")
+        .populate("subCategory", "name")
+        .sort({ createdAt: -1 }),
+      Product.countDocuments(filter),
+    ]);
 
-    const total = await Product.countDocuments(filter);
-
-    return res.status(200).json({
-      success: true,
-      total,
-      page: Number(page),
-      limit: Number(limit),
-      data: products,
-    });
+    return res.status(200).json({ success: true, total, data: products });
   } catch (error) {
     console.error("Get All Products Error:", error);
     return res.status(500).json({ message: error.message });
   }
 };
 
-//
+// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 GET PRODUCT BY ID
-//
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getProductById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -241,9 +263,7 @@ exports.getProductById = async (req, res) => {
       .populate("category", "name")
       .populate("subCategory", "name");
 
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
+    if (!product) return res.status(404).json({ message: "Product not found" });
 
     return res.status(200).json({ success: true, product });
   } catch (error) {
@@ -252,9 +272,43 @@ exports.getProductById = async (req, res) => {
   }
 };
 
-//
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔹 COMPUTE PRICE ENDPOINT
+//    POST /api/products/:id/compute-price
+//    Body: { selectedOptions: { [customizationId]: string | string[] } }
+// ─────────────────────────────────────────────────────────────────────────────
+exports.computePrice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { selectedOptions = {} } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid product ID" });
+    }
+
+    const product = await Product.findById(id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    const basePrice = product.price;
+    const finalPrice = computeFinalPrice(product, selectedOptions);
+    const delta = finalPrice - basePrice;
+
+    return res.status(200).json({
+      success: true,
+      basePrice,
+      finalPrice,
+      adjustment: delta, // total +/- applied
+      adjustmentLabel: delta >= 0 ? `+₹${delta}` : `-₹${Math.abs(delta)}`,
+    });
+  } catch (error) {
+    console.error("Compute Price Error:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 UPDATE PRODUCT
-//
+// ─────────────────────────────────────────────────────────────────────────────
 exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -264,19 +318,16 @@ exports.updateProduct = async (req, res) => {
       return res.status(400).json({ message: "Invalid product ID" });
     }
 
-    // 🔥 Customizations
+    // Customizations
     if (data.customizations) {
       data.customizations = normalizeCustomizations(data.customizations);
-
       const error = validateCustomizations(data.customizations);
       if (error) return res.status(400).json({ message: error });
     }
 
-    // ✅ SuperTags validation
+    // SuperTags
     if (data.superTags && data.superTags.length > 5) {
-      return res.status(400).json({
-        message: "Maximum 5 superTags allowed",
-      });
+      return res.status(400).json({ message: "Maximum 5 superTags allowed" });
     }
 
     const product = await Product.findByIdAndUpdate(id, data, {
@@ -286,9 +337,7 @@ exports.updateProduct = async (req, res) => {
       .populate("category", "name")
       .populate("subCategory", "name");
 
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
+    if (!product) return res.status(404).json({ message: "Product not found" });
 
     return res.status(200).json({
       success: true,
@@ -301,9 +350,9 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-//
+// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 DELETE PRODUCT
-//
+// ─────────────────────────────────────────────────────────────────────────────
 exports.deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -313,24 +362,20 @@ exports.deleteProduct = async (req, res) => {
     }
 
     const product = await Product.findByIdAndDelete(id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
 
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Product deleted successfully",
-    });
+    return res
+      .status(200)
+      .json({ success: true, message: "Product deleted successfully" });
   } catch (error) {
     console.error("Delete Product Error:", error);
     return res.status(500).json({ message: error.message });
   }
 };
 
-//
+// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 GET PRODUCTS BY CATEGORY
-//
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getProductsByCategory = async (req, res) => {
   try {
     const { categoryId } = req.params;
@@ -353,9 +398,9 @@ exports.getProductsByCategory = async (req, res) => {
   }
 };
 
-//
+// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 GET PRODUCTS BY SUBCATEGORY
-//
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getProductsBySubCategory = async (req, res) => {
   try {
     const { subCategoryId } = req.params;
@@ -381,15 +426,12 @@ exports.getProductsBySubCategory = async (req, res) => {
   }
 };
 
-//
+// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 GET POPULAR PRODUCTS
-//
+// ─────────────────────────────────────────────────────────────────────────────
 exports.getPopularProducts = async (req, res) => {
   try {
-    const products = await Product.find({
-      popular: true,
-      active: true,
-    })
+    const products = await Product.find({ popular: true, active: true })
       .populate("category", "name")
       .populate("subCategory", "name")
       .sort({ rating: -1 })
@@ -404,9 +446,9 @@ exports.getPopularProducts = async (req, res) => {
   }
 };
 
-//
+// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 TOGGLE ACTIVE STATUS
-//
+// ─────────────────────────────────────────────────────────────────────────────
 exports.toggleProductStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -416,10 +458,7 @@ exports.toggleProductStatus = async (req, res) => {
     }
 
     const product = await Product.findById(id);
-
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
+    if (!product) return res.status(404).json({ message: "Product not found" });
 
     product.active = !product.active;
     await product.save();

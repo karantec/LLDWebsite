@@ -20,6 +20,7 @@ const UserRoutes = require("./routes/Users.routes");
 const Banner = require("./routes/Banner.routes");
 const Category = require("./routes/category.routes");
 const Products = require("./routes/product.routes");
+const ComplaintSetting = require("./routes/Complain.route");
 const SubCategory = require("./routes/subCategory.routes");
 const Cart = require("./routes/cart.routes");
 
@@ -58,9 +59,11 @@ app.use("/api/ads", Banner);
 app.use("/api/category", Category);
 app.use("/api/subcategory", SubCategory);
 app.use("/api/product", Products);
+
 // app.use("/api/vendor", Vendor);
 app.use("/api/cart", Cart);
 app.use("/api/order", Order);
+app.use("/api/complaint", Order);
 app.use("/api/payment", paymentRoutes);
 
 /* =======================

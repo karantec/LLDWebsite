@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Subcategory = require("../models/subCategory.model");
 const Category = require("../models/Category.model");
+const Product = require("../models/Product.model"); // Missing import added
 const csv = require("csv-parser");
 const fs = require("fs");
 const path = require("path");
@@ -11,17 +12,33 @@ const path = require("path");
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 // Find category by ID or name
+const findCategory = async (categoryInput) => {
+  if (!categoryInput) return null;
+
+  // Try to find by ObjectId first
+  if (mongoose.Types.ObjectId.isValid(categoryInput)) {
+    const cat = await Category.findById(categoryInput);
+    if (cat) return cat;
+  }
+
+  // Otherwise, find by name (case-insensitive)
+  const catByName = await Category.findOne({
+    name: { $regex: new RegExp(`^${categoryInput.trim()}$`, "i") },
+  });
+  return catByName;
+};
 
 // ================= CRUD Controllers ================= //
 
 // CREATE Subcategory
 const createSubcategory = async (req, res) => {
   try {
-    const { name, category, image } = req.body;
+    const { name, category, image, section } = req.body;
 
-    if (!name || !category || !image) {
+    // Fixed: Added section to required check
+    if (!name || !category || !image || !section) {
       return res.status(400).json({
-        message: "Name, category, and image are required",
+        message: "Name, category, image, and section are required",
       });
     }
 
@@ -36,9 +53,10 @@ const createSubcategory = async (req, res) => {
 
     // Prevent duplicates (based on name + category)
     const existingSubcategory = await Subcategory.findOne({
-      name: name.trim(),
+      name: { $regex: new RegExp(`^${name.trim()}$`, "i") },
       category: categoryId,
     });
+
     if (existingSubcategory) {
       return res.status(400).json({
         message: "Subcategory with this name already exists in this category",
@@ -49,10 +67,11 @@ const createSubcategory = async (req, res) => {
       name: name.trim(),
       category: categoryId,
       image: image.trim(),
+      section: section.trim(), // Added section field
     });
 
     const populatedSubcategory = await Subcategory.findById(
-      subcategory._id
+      subcategory._id,
     ).populate("category", "name");
 
     return res.status(201).json({
@@ -83,14 +102,17 @@ const createSubcategory = async (req, res) => {
 // READ All Subcategories (with pagination & filter)
 const getSubcategories = async (req, res) => {
   try {
-    const { category } = req.query;
+    const { category, section, page = 1, limit = 20 } = req.query;
 
     const filter = {};
+
     if (category) {
       if (isValidObjectId(category)) {
         filter.category = category;
       } else {
-        const categoryDoc = await Category.findOne({ name: category });
+        const categoryDoc = await Category.findOne({
+          name: { $regex: new RegExp(`^${category}$`, "i") },
+        });
         if (!categoryDoc) {
           return res.status(400).json({ message: "Category not found" });
         }
@@ -98,47 +120,25 @@ const getSubcategories = async (req, res) => {
       }
     }
 
+    // Added section filter
+    if (section) {
+      filter.section = section;
+    }
+
+    const skip = (page - 1) * limit;
+
     const subcategories = await Subcategory.find(filter)
       .populate("category", "name")
-      .sort({ name: 1 });
+      .sort({ name: 1 })
+      .skip(skip)
+      .limit(Number(limit));
+
+    const total = await Subcategory.countDocuments(filter);
 
     return res.status(200).json({
       message: "Subcategories retrieved successfully",
       subcategories,
       count: subcategories.length,
-    });
-  } catch (error) {
-    console.error("Error fetching subcategories:", error);
-    return res.status(500).json({ message: "Internal server error" });
-  }
-};
-
-const getProductsByCategory = async (req, res) => {
-  try {
-    const { category } = req.params; // category can be ID or name
-    const { page = 1, limit = 20 } = req.query;
-
-    // Use helper to find by ID or name
-    const categoryDoc = await findCategory(category);
-    if (!categoryDoc) {
-      return res.status(404).json({ message: "Category not found" });
-    }
-
-    const skip = (page - 1) * limit;
-
-    const products = await Product.find({ category: categoryDoc._id })
-      .populate("category", "name")
-      .populate("subcategory", "name")
-      .skip(skip)
-      .limit(Number(limit))
-      .sort({ createdAt: -1 });
-
-    const total = await Product.countDocuments({ category: categoryDoc._id });
-
-    return res.status(200).json({
-      message: "Products retrieved successfully",
-      category: categoryDoc.name,
-      products,
       pagination: {
         total,
         page: Number(page),
@@ -147,7 +147,7 @@ const getProductsByCategory = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching products by category:", error);
+    console.error("Error fetching subcategories:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -163,7 +163,7 @@ const getSubcategoryById = async (req, res) => {
 
     const subcategory = await Subcategory.findById(id).populate(
       "category",
-      "name"
+      "name",
     );
 
     if (!subcategory) {
@@ -209,6 +209,8 @@ const getSubcategoriesByCategory = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+// GET All Categories with their Subcategories
 const getAllCategoriesWithSubcategories = async (req, res) => {
   try {
     const categories = await Category.find().sort({ name: 1 });
@@ -222,11 +224,11 @@ const getAllCategoriesWithSubcategories = async (req, res) => {
         return {
           _id: cat._id,
           name: cat.name,
-          image: cat.image || null, // if your Category has image field
+          image: cat.image || null,
           subcategories,
           subcategoryCount: subcategories.length,
         };
-      })
+      }),
     );
 
     return res.status(200).json({
@@ -239,47 +241,56 @@ const getAllCategoriesWithSubcategories = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
 // UPDATE Subcategory
 const updateSubcategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, image } = req.body;
+    const { name, category, image, section } = req.body;
 
     if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid subcategory ID format" });
     }
-    if (!name || !category) {
-      return res
-        .status(400)
-        .json({ message: "Name and category ID/name are required" });
+
+    // Build update data dynamically
+    const updateData = {};
+
+    if (name) {
+      updateData.name = name.trim();
     }
 
-    const categoryExists = await findCategory(category);
-    if (!categoryExists) {
-      return res
-        .status(400)
-        .json({ message: "Invalid category. Category does not exist." });
+    if (category) {
+      const categoryExists = await findCategory(category);
+      if (!categoryExists) {
+        return res
+          .status(400)
+          .json({ message: "Invalid category. Category does not exist." });
+      }
+      updateData.category = categoryExists._id;
     }
 
-    const categoryId = categoryExists._id;
-
-    const existingSubcategory = await Subcategory.findOne({
-      name: name.trim(),
-      category: categoryId,
-      _id: { $ne: id },
-    });
-    if (existingSubcategory) {
-      return res.status(400).json({
-        message: "Subcategory with this name already exists in this category",
-      });
-    }
-
-    const updateData = {
-      name: name.trim(),
-      category: categoryId,
-    };
     if (image) {
       updateData.image = image.trim();
+    }
+
+    if (section) {
+      updateData.section = section.trim();
+    }
+
+    // Check for duplicate only if name or category is being updated
+    if (name || category) {
+      const existingSubcategory = await Subcategory.findOne({
+        name: updateData.name || (await Subcategory.findById(id)).name,
+        category:
+          updateData.category || (await Subcategory.findById(id)).category,
+        _id: { $ne: id },
+      });
+
+      if (existingSubcategory) {
+        return res.status(400).json({
+          message: "Subcategory with this name already exists in this category",
+        });
+      }
     }
 
     const subcategory = await Subcategory.findByIdAndUpdate(id, updateData, {
@@ -317,9 +328,17 @@ const deleteSubcategory = async (req, res) => {
       return res.status(400).json({ message: "Invalid subcategory ID format" });
     }
 
+    // Check if subcategory has any products before deletion (optional)
+    const productsCount = await Product.countDocuments({ subcategory: id });
+    if (productsCount > 0) {
+      return res.status(400).json({
+        message: `Cannot delete subcategory. It has ${productsCount} associated products.`,
+      });
+    }
+
     const subcategory = await Subcategory.findByIdAndDelete(id).populate(
       "category",
-      "name"
+      "name",
     );
 
     if (!subcategory) {
@@ -335,19 +354,47 @@ const deleteSubcategory = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-const findCategory = async (categoryInput) => {
-  if (!categoryInput) return null;
 
-  // Try to find by ObjectId first
-  if (mongoose.Types.ObjectId.isValid(categoryInput)) {
-    const cat = await Category.findById(categoryInput);
-    if (cat) return cat;
+// GET Products by Category
+const getProductsByCategory = async (req, res) => {
+  try {
+    const { category } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+
+    const categoryDoc = await findCategory(category);
+    if (!categoryDoc) {
+      return res.status(404).json({ message: "Category not found" });
+    }
+
+    const skip = (page - 1) * limit;
+
+    const products = await Product.find({ category: categoryDoc._id })
+      .populate("category", "name")
+      .populate("subcategory", "name")
+      .skip(skip)
+      .limit(Number(limit))
+      .sort({ createdAt: -1 });
+
+    const total = await Product.countDocuments({ category: categoryDoc._id });
+
+    return res.status(200).json({
+      message: "Products retrieved successfully",
+      category: categoryDoc.name,
+      products,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching products by category:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
-
-  // Otherwise, find by name (case-insensitive)
-  const catByName = await Category.findOne({ name: categoryInput.trim() });
-  return catByName;
 };
+
+// BULK UPLOAD Subcategories from CSV
 const bulkUploadSubcategories = async (req, res) => {
   try {
     if (!req.file) {
@@ -363,9 +410,10 @@ const bulkUploadSubcategories = async (req, res) => {
         const name = row.name?.trim();
         const category = row.category?.trim();
         const image = row.image?.trim();
+        const section = row.section?.trim(); // Added section field
 
-        if (name && category && image) {
-          subcategoriesToInsert.push({ name, category, image });
+        if (name && category && image && section) {
+          subcategoriesToInsert.push({ name, category, image, section });
         }
       })
       .on("end", async () => {
@@ -375,14 +423,11 @@ const bulkUploadSubcategories = async (req, res) => {
 
           for (const sub of subcategoriesToInsert) {
             try {
-              // Improved category lookup - handle both ObjectId and name
               let categoryExists;
 
-              // Check if category value is a valid ObjectId
               if (mongoose.Types.ObjectId.isValid(sub.category)) {
                 categoryExists = await Category.findById(sub.category);
               } else {
-                // If not ObjectId, search by name (case-insensitive)
                 categoryExists = await Category.findOne({
                   name: { $regex: new RegExp(`^${sub.category}$`, "i") },
                 });
@@ -393,7 +438,6 @@ const bulkUploadSubcategories = async (req, res) => {
                 continue;
               }
 
-              // Check for duplicate subcategory (case-insensitive name check)
               const existing = await Subcategory.findOne({
                 name: { $regex: new RegExp(`^${sub.name}$`, "i") },
                 category: categoryExists._id,
@@ -404,11 +448,11 @@ const bulkUploadSubcategories = async (req, res) => {
                 continue;
               }
 
-              // Create new subcategory
               const newSub = await Subcategory.create({
                 name: sub.name,
                 category: categoryExists._id,
                 image: sub.image,
+                section: sub.section,
               });
 
               inserted.push(newSub);
@@ -435,7 +479,6 @@ const bulkUploadSubcategories = async (req, res) => {
         } catch (processingError) {
           console.error("Error processing CSV data:", processingError);
 
-          // Clean up file on error
           try {
             fs.unlinkSync(filePath);
           } catch (fileErr) {
@@ -451,7 +494,6 @@ const bulkUploadSubcategories = async (req, res) => {
       .on("error", (streamError) => {
         console.error("CSV parsing error:", streamError);
 
-        // Clean up file on stream error
         try {
           fs.unlinkSync(filePath);
         } catch (fileErr) {
@@ -471,6 +513,7 @@ const bulkUploadSubcategories = async (req, res) => {
     });
   }
 };
+
 // ================= Export ================= //
 module.exports = {
   createSubcategory,
