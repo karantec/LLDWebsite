@@ -1,7 +1,5 @@
 const mongoose = require("mongoose");
 
-// Define allowed sections (you can customize these)
-
 const subCategorySchema = new mongoose.Schema(
   {
     name: {
@@ -15,8 +13,7 @@ const subCategorySchema = new mongoose.Schema(
       required: [true, "Category is required"],
     },
     image: {
-      type: String, // will store image URL
-      required: false, // optional
+      type: String,
       trim: true,
     },
     section: {
@@ -26,6 +23,5 @@ const subCategorySchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-module.exports = {
-  subCategoryModel: mongoose.model("subCategory", subCategorySchema),
-};
+// ✅ FIX
+module.exports = mongoose.model("Subcategory", subCategorySchema);
