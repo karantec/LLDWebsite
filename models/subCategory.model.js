@@ -23,5 +23,4 @@ const subCategorySchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-// ✅ FIX
 module.exports = mongoose.model("Subcategory", subCategorySchema);
