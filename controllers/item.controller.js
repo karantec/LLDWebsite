@@ -275,16 +275,37 @@ exports.getAllProducts = async (req, res) => {
       ];
     }
 
+    // ✅ FETCH WITH POPULATE
     const [products, total] = await Promise.all([
-      Product.find(filter).populate(populateFields).sort({ createdAt: -1 }),
+      Product.find(filter)
+        .populate("category", "name")
+        .populate("subCategory", "name image section") // 👈 include image
+        .sort({ createdAt: -1 }),
 
       Product.countDocuments(filter),
     ]);
 
+    // ✅ TRANSFORM RESPONSE (IMPORTANT)
+    const updatedProducts = products.map((p) => {
+      const subCat = p.subCategory || {};
+
+      return {
+        ...p._doc,
+
+        // ✅ clean subCategory object
+        subCategory: {
+          _id: subCat._id,
+          name: subCat.name,
+          section: subCat.section || null,
+          image: subCat.image || p.media?.[0]?.url || null, // 👈 fallback fix
+        },
+      };
+    });
+
     return res.status(200).json({
       success: true,
       total,
-      data: products,
+      data: updatedProducts,
     });
   } catch (error) {
     console.error("Get All Products Error:", error);
