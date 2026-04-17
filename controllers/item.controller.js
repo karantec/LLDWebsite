@@ -2,7 +2,17 @@ const mongoose = require("mongoose");
 const Product = require("../models/Product.model");
 const Category = require("../models/Category.model");
 const SubCategory = require("../models/subCategory.model");
-
+const populateFields = [
+  { path: "category", select: "name" },
+  {
+    path: "subCategory",
+    select: "name section",
+    populate: {
+      path: "section",
+      select: "name",
+    },
+  },
+];
 // ─────────────────────────────────────────────────────────────────────────────
 // 🔹 VALIDATE CUSTOMIZATIONS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -216,11 +226,43 @@ exports.createProduct = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // 🔹 GET ALL PRODUCTS
 // ─────────────────────────────────────────────────────────────────────────────
+// exports.getAllProducts = async (req, res) => {
+//   try {
+//     const { category, subCategory, popular, active, search } = req.query;
+
+//     const filter = {};
+//     if (category) filter.category = category;
+//     if (subCategory) filter.subCategory = subCategory;
+//     if (popular) filter.popular = popular === "true";
+//     if (active) filter.active = active === "true";
+
+//     if (search) {
+//       filter.$or = [
+//         { name: { $regex: search, $options: "i" } },
+//         { productName: { $regex: search, $options: "i" } },
+//       ];
+//     }
+
+//     const [products, total] = await Promise.all([
+//       Product.find(filter)
+//         .populate("category", "name")
+//         .populate("subCategory", "name")
+//         .sort({ createdAt: -1 }),
+//       Product.countDocuments(filter),
+//     ]);
+
+//     return res.status(200).json({ success: true, total, data: products });
+//   } catch (error) {
+//     console.error("Get All Products Error:", error);
+//     return res.status(500).json({ message: error.message });
+//   }
+// };
 exports.getAllProducts = async (req, res) => {
   try {
     const { category, subCategory, popular, active, search } = req.query;
 
     const filter = {};
+
     if (category) filter.category = category;
     if (subCategory) filter.subCategory = subCategory;
     if (popular) filter.popular = popular === "true";
@@ -234,14 +276,16 @@ exports.getAllProducts = async (req, res) => {
     }
 
     const [products, total] = await Promise.all([
-      Product.find(filter)
-        .populate("category", "name")
-        .populate("subCategory", "name")
-        .sort({ createdAt: -1 }),
+      Product.find(filter).populate(populateFields).sort({ createdAt: -1 }),
+
       Product.countDocuments(filter),
     ]);
 
-    return res.status(200).json({ success: true, total, data: products });
+    return res.status(200).json({
+      success: true,
+      total,
+      data: products,
+    });
   } catch (error) {
     console.error("Get All Products Error:", error);
     return res.status(500).json({ message: error.message });
