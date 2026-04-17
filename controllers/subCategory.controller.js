@@ -102,10 +102,11 @@ const createSubcategory = async (req, res) => {
 // READ All Subcategories (with pagination & filter)
 const getSubcategories = async (req, res) => {
   try {
-    const { category, section, page = 1, limit = 20 } = req.query;
+    const { category, section } = req.query;
 
     const filter = {};
 
+    // Category filter
     if (category) {
       if (isValidObjectId(category)) {
         filter.category = category;
@@ -113,25 +114,24 @@ const getSubcategories = async (req, res) => {
         const categoryDoc = await Category.findOne({
           name: { $regex: new RegExp(`^${category}$`, "i") },
         });
+
         if (!categoryDoc) {
           return res.status(400).json({ message: "Category not found" });
         }
+
         filter.category = categoryDoc._id;
       }
     }
 
-    // Added section filter
+    // Section filter
     if (section) {
       filter.section = section;
     }
 
-    const skip = (page - 1) * limit;
-
+    // Fetch all without pagination
     const subcategories = await Subcategory.find(filter)
       .populate("category", "name")
-      .sort({ name: 1 })
-      .skip(skip)
-      .limit(Number(limit));
+      .sort({ name: 1 });
 
     const total = await Subcategory.countDocuments(filter);
 
@@ -139,12 +139,7 @@ const getSubcategories = async (req, res) => {
       message: "Subcategories retrieved successfully",
       subcategories,
       count: subcategories.length,
-      pagination: {
-        total,
-        page: Number(page),
-        limit: Number(limit),
-        pages: Math.ceil(total / limit),
-      },
+      total,
     });
   } catch (error) {
     console.error("Error fetching subcategories:", error);
