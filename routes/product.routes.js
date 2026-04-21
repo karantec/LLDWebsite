@@ -41,6 +41,8 @@ router.get("/:id", getProductById);
 // ─── Admin Routes ──────────────────────────────────────────
 // Create product
 router.post("/create", protect, admin, createProduct);
+//
+router.post("/createCard", createProduct);
 
 // Update product
 router.put("/:id", protect, admin, updateProduct);
