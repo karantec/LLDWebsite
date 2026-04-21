@@ -8,18 +8,18 @@ const cartItemSchema = new mongoose.Schema({
   },
   name: { type: String, required: true },
   image: { type: String },
-  unit: { type: String },
-  mrp: { type: Number, required: true },
-  sellingPrice: { type: Number, required: true },
-  discount: { type: Number, default: 0 },
-  quantity: { type: Number, default: 1 },
-  lineTotal: { type: Number, default: 0 },
+
+  price: { type: Number, required: true },
+
+  // 🔥 NEW: designs array
+  designs: [
+    {
+      config: { type: Object, default: {} },
+      quantity: { type: Number, default: 1 },
+    },
+  ],
 });
 
-cartItemSchema.pre("save", function (next) {
-  this.lineTotal = this.sellingPrice * this.quantity;
-  next();
-});
 
 const cartSchema = new mongoose.Schema(
   {
@@ -43,7 +43,13 @@ const cartSchema = new mongoose.Schema(
 );
 
 cartSchema.pre("save", function (next) {
-  this.subTotal = this.items.reduce((sum, item) => sum + item.lineTotal, 0);
+  this.subTotal = this.items.reduce((sum, item) => {
+  const itemTotal = item.designs.reduce(
+    (dSum, d) => dSum + d.quantity * item.price,
+    0
+  );
+  return sum + itemTotal;
+}, 0);
   this.grandTotal = this.subTotal + this.deliveryFee;
   next();
 });
