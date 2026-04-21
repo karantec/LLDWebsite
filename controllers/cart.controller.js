@@ -45,8 +45,8 @@ const addToCart = async (req, res) => {
     let cart = await Cart.findOne({ user: userId });
     if (!cart) cart = new Cart({ user: userId });
 
-    const product = await Product.findById(productId);
-    console.log("PRODUCT FROM DB:", product);
+    const product = await Product.findById(productId).lean();
+    console.log("PRICE GOING INTO CART:", product.price);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
     const index = cart.items.findIndex(
