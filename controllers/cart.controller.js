@@ -60,7 +60,7 @@ const addToCart = async (req, res) => {
         productId: product._id,
         name: product.name,
         image: product.images?.[0] || "",
-        price: product.price,
+        price: product.sellingPrice,
         designs: configs,
       });
     }
