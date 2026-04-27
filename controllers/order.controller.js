@@ -151,13 +151,18 @@ exports.paymentFailed = async (req, res) => {
 // 🔹 GET MY ORDERS
 //
 exports.getMyOrders = async (req, res) => {
+  console.log("🚀 ORDER CONTROLLER - getMyOrders called");
+  console.log("URL:", req.originalUrl);
+  console.log("User:", req.user?._id);
+
   const orders = await Order.find({ user: req.user._id })
     .populate("items.product")
+    .populate("trackingUpdates.updatedBy")
     .sort({ createdAt: -1 });
 
+  console.log("Orders found:", orders.length);
   res.json({ success: true, orders });
 };
-
 //
 // 🔹 GET SINGLE ORDER
 //
