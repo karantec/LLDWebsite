@@ -65,7 +65,7 @@ app.use("/api/offercode", Coupans);
 // app.use("/api/vendor", Vendor);
 app.use("/api/cart", Cart);
 app.use("/api/order", Order);
-app.use("/api/complaint", Order);
+app.use("/api/complaint", ComplaintSetting);
 app.use("/api/payment", paymentRoutes);
 
 /* =======================
