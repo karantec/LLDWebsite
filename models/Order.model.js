@@ -1,8 +1,5 @@
 const mongoose = require("mongoose");
 
-//
-// 🔹 Order Item Snapshot (IMPORTANT)
-//
 const OrderItemSchema = new mongoose.Schema(
   {
     product: {
@@ -24,9 +21,6 @@ const OrderItemSchema = new mongoose.Schema(
   { _id: false },
 );
 
-//
-// 🔹 Address Schema
-//
 const AddressSchema = new mongoose.Schema(
   {
     name: String,
@@ -39,9 +33,6 @@ const AddressSchema = new mongoose.Schema(
   { _id: false },
 );
 
-//
-// 🔹 Razorpay Payment Schema
-//
 const PaymentSchema = new mongoose.Schema(
   {
     method: {
@@ -49,12 +40,11 @@ const PaymentSchema = new mongoose.Schema(
       enum: ["COD", "ONLINE"],
       required: true,
     },
-
     status: {
       type: String,
       enum: [
         "NOT_INITIATED",
-        "CREATED", // Razorpay order created
+        "CREATED",
         "PENDING",
         "PAID",
         "FAILED",
@@ -62,27 +52,33 @@ const PaymentSchema = new mongoose.Schema(
       ],
       default: "NOT_INITIATED",
     },
-
-    razorpayOrderId: { type: String, default: null },
-    razorpayPaymentId: { type: String, default: null },
-    razorpaySignature: { type: String, default: null },
-
-    amount: { type: Number, required: true },
-
+    razorpayOrderId: String,
+    razorpayPaymentId: String,
+    amount: Number,
     currency: { type: String, default: "INR" },
-
-    paidAt: { type: Date, default: null },
-    failedReason: { type: String, default: null },
-
-    refundId: { type: String, default: null },
-    refundAmount: { type: Number, default: null },
+    paidAt: Date,
   },
   { _id: false },
 );
 
-//
-// 🔹 Main Order Schema
-//
+/* 🔥 NEW: TRACKING SCHEMA */
+const TrackingSchema = new mongoose.Schema(
+  {
+    status: String, // e.g. Shipped, Out for delivery
+    location: String, // Delhi, Bangalore
+    note: String,
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+  },
+  { _id: false },
+);
+
 const OrderSchema = new mongoose.Schema(
   {
     user: {
@@ -91,20 +87,14 @@ const OrderSchema = new mongoose.Schema(
       required: true,
     },
 
-    items: {
-      type: [OrderItemSchema],
-      required: true,
-    },
+    items: [OrderItemSchema],
 
-    // 💰 Pricing snapshot
-    subTotal: { type: Number, required: true },
-    deliveryFee: { type: Number, default: 0 },
-    totalAmount: { type: Number, required: true },
+    subTotal: Number,
+    deliveryFee: Number,
+    totalAmount: Number,
 
-    // 📍 Address
     shippingAddress: AddressSchema,
 
-    // 📦 Order lifecycle
     status: {
       type: String,
       enum: [
@@ -118,14 +108,15 @@ const OrderSchema = new mongoose.Schema(
       default: "PLACED",
     },
 
-    // 💳 Payment info
-    payment: {
-      type: PaymentSchema,
-      required: true,
+    payment: PaymentSchema,
+
+    /* 🔥 NEW FIELD */
+    trackingUpdates: {
+      type: [TrackingSchema],
+      default: [],
     },
 
-    // 🧾 Optional metadata
-    notes: { type: String, default: "" },
+    notes: String,
   },
   { timestamps: true },
 );

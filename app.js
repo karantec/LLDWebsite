@@ -23,6 +23,7 @@ const Products = require("./routes/product.routes");
 const ComplaintSetting = require("./routes/Complain.route");
 const SubCategory = require("./routes/subCategory.routes");
 const Cart = require("./routes/cart.routes");
+const Coupans = require("./routes/Coupan.routes");
 
 const Order = require("./routes/order.routes");
 /* =======================
@@ -59,6 +60,7 @@ app.use("/api/ads", Banner);
 app.use("/api/category", Category);
 app.use("/api/subcategory", SubCategory);
 app.use("/api/product", Products);
+app.use("/api/offercode", Coupans);
 
 // app.use("/api/vendor", Vendor);
 app.use("/api/cart", Cart);

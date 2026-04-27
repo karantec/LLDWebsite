@@ -1,91 +1,170 @@
-const PromoCodeModel = require("../models/PromoCode.model");
+const Coupon = require("../models/Coupan.model");
 
-const createPromotion = async (req, res) => {
+const createCoupon = async (req, res) => {
   try {
-    const {
-      title,
-      description,
-      discountPercentage,
-      startDate,
-      endDate,
-      isActive,
-      applicableProducts,
-    } = req.body;
+    const { code, discountType, discountValue, validFrom, validTill } =
+      req.body;
 
-    if (
-      !title ||
-      !description ||
-      !discountPercentage ||
-      !startDate ||
-      !endDate ||
-      !applicableProducts ||
-      isActive===undefined
-    ) {
+    // Basic validation
+    if (!code || !discountType || !discountValue || !validFrom || !validTill) {
       return res.status(400).json({
-        message: "Promotion Detail are required",
+        success: false,
+        message: "Missing required fields",
       });
     }
 
-    const newPromo = new PromoCodeModel({
-      title,
-      description,
-      discountPercentage,
-      startDate,
-      endDate,
-      isActive,
-      applicableProducts,
+    // Validate discount type
+    if (!["PERCENTAGE", "FIXED"].includes(discountType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid discount type",
+      });
+    }
+
+    // Validate date
+    if (new Date(validFrom) >= new Date(validTill)) {
+      return res.status(400).json({
+        success: false,
+        message: "validTill must be greater than validFrom",
+      });
+    }
+
+    // Check duplicate
+    const existing = await Coupon.findOne({
+      code: code.toUpperCase(),
     });
 
-    await newPromo.save();
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: "Coupon already exists",
+      });
+    }
 
-    res.status(201).json({
-      message: "Promo created Sussessfully",
-      promo: newPromo,
+    // Create coupon
+    const coupon = await Coupon.create({
+      ...req.body,
+      code: code.toUpperCase(),
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Coupon created successfully",
+      data: coupon,
     });
   } catch (error) {
-    console.error("Error in promotion creation", error);
-    res.status(500).json({
-      message: "Serrver Error",
-      error: error.message,
+    return res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };
-
-const updatePromotion = async (req, res) => {
+const applyCoupon = async (req, res) => {
   try {
-    
-    const { title,isActive } = req.body;
+    const { code, cartTotal, userId } = req.body;
 
-    // Validate required fields
-    if (!title || isActive === undefined) {
-      return res.status(400).json({ message: "All fields are required" });
+    if (!code || !cartTotal || !userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields",
+      });
     }
 
-    // Find and update the promotion
-    const promotion = await PromoCodeModel.findOneAndUpdate(
-      { title },
-      { isActive },
-      { new: true, runValidators: true }
-    );
+    const coupon = await Coupon.findOne({
+      code: code.toUpperCase(),
+      isActive: true,
+    });
 
-    // Check if promotion exists
-    if (!promotion) {
-      return res.status(404).json({ message: "Promotion not found" });
+    if (!coupon) {
+      return res.status(404).json({
+        success: false,
+        message: "Invalid or inactive coupon",
+      });
     }
 
-    res.status(200).json({
-      message: "Promotion details updated successfully",
-      promotion,
+    const now = new Date();
+
+    // Expiry check
+    if (now < coupon.validFrom || now > coupon.validTill) {
+      return res.status(400).json({
+        success: false,
+        message: "Coupon expired or not valid",
+      });
+    }
+
+    // Usage limit
+    if (coupon.usedCount >= coupon.usageLimit) {
+      return res.status(400).json({
+        success: false,
+        message: "Coupon usage limit reached",
+      });
+    }
+
+    // Per user check
+    if (coupon.usersUsed.includes(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Coupon already used by this user",
+      });
+    }
+
+    // Minimum order check
+    if (cartTotal < coupon.minOrderAmount) {
+      return res.status(400).json({
+        success: false,
+        message: `Minimum order should be ₹${coupon.minOrderAmount}`,
+      });
+    }
+
+    let discount = 0;
+
+    if (coupon.discountType === "PERCENTAGE") {
+      discount = (cartTotal * coupon.discountValue) / 100;
+
+      if (coupon.maxDiscountAmount) {
+        discount = Math.min(discount, coupon.maxDiscountAmount);
+      }
+    } else {
+      discount = coupon.discountValue;
+    }
+
+    const finalAmount = Math.max(cartTotal - discount, 0);
+
+    return res.status(200).json({
+      success: true,
+      message: "Coupon applied successfully",
+      data: {
+        couponId: coupon._id,
+        discount,
+        finalAmount,
+      },
     });
   } catch (error) {
-    console.error("Error in updating promotion:", error);
-    res.status(500).json({
-      message: "Server Error",
-      error: error.message,
+    return res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };
 
-module.exports={
-  createPromotion,updatePromotion
-}
+const getCoupons = async (req, res) => {
+  try {
+    const coupons = await Coupon.find().sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: coupons.length,
+      data: coupons,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+module.exports = {
+  createCoupon,
+  applyCoupon,
+  getCoupons,
+};

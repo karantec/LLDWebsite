@@ -17,6 +17,17 @@ router.get("/:id", protect, orderCtrl.getOrder);
 // 🔹 ADMIN ROUTES
 //
 router.get("/admin/all", protect, admin, orderCtrl.getAllOrders);
+
+// 🔹 Update order status
 router.put("/admin/:id/status", protect, admin, orderCtrl.updateOrderStatus);
+router.post("/admin/:id/tracking", protect, admin, orderCtrl.addTrackingUpdate);
+// 🔥 NEW: Update order items (ADMIN)
+router.put(
+  "/admin/:id/items",
+  protect,
+  admin,
+  orderCtrl.updateOrderItemsByAdmin,
+);
+console.log("Tracking Fn:", orderCtrl.addTrackingUpdate);
 
 module.exports = router;

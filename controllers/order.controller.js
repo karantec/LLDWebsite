@@ -5,7 +5,7 @@ const razorpay = require("../config/razorpay");
 const crypto = require("crypto");
 
 //
-// 🔹 CREATE ORDER (COD + ONLINE)
+// 🔹 CREATE ORDER
 //
 exports.createOrder = async (req, res) => {
   try {
@@ -16,24 +16,14 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ message: "No items provided" });
     }
 
-    if (!["COD", "ONLINE"].includes(paymentMethod)) {
-      return res.status(400).json({ message: "Invalid payment method" });
-    }
-
-    // 🔹 Fetch products
     const products = await Product.find({
       _id: { $in: items.map((i) => i.product) },
     });
-
-    if (products.length === 0) {
-      return res.status(400).json({ message: "Products not found" });
-    }
 
     let subTotal = 0;
 
     const orderItems = items.map((item) => {
       const product = products.find((p) => p._id.toString() === item.product);
-      if (!product) throw new Error("Invalid product");
 
       const lineTotal = product.price * item.quantity;
       subTotal += lineTotal;
@@ -63,14 +53,11 @@ exports.createOrder = async (req, res) => {
 
     let razorpayOrder = null;
 
-    //
-    // 🔥 ONLINE PAYMENT FLOW
-    //
     if (paymentMethod === "ONLINE") {
       razorpayOrder = await razorpay.orders.create({
-        amount: totalAmount * 100, // paise
+        amount: totalAmount * 100,
         currency: "INR",
-        receipt: `order_rcpt_${Date.now()}`,
+        receipt: `order_${Date.now()}`,
       });
 
       paymentData = {
@@ -78,13 +65,9 @@ exports.createOrder = async (req, res) => {
         status: "CREATED",
         razorpayOrderId: razorpayOrder.id,
         amount: totalAmount,
-        currency: "INR",
       };
     }
 
-    //
-    // 🔹 CREATE ORDER
-    //
     const order = await Order.create({
       user: userId,
       items: orderItems,
@@ -94,16 +77,13 @@ exports.createOrder = async (req, res) => {
       shippingAddress,
       payment: paymentData,
       status: "PLACED",
+      trackingUpdates: [], // 🔥 INIT
     });
 
-    res.status(201).json({
-      success: true,
-      order,
-      razorpayOrder, // frontend needs this
-    });
-  } catch (error) {
-    console.error("Create Order Error:", error);
-    res.status(500).json({ message: "Error creating order" });
+    res.status(201).json({ success: true, order, razorpayOrder });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Create order failed" });
   }
 };
 
@@ -129,29 +109,20 @@ exports.verifyPayment = async (req, res) => {
     }
 
     const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ message: "Order not found" });
 
-    // ✅ Update payment
     order.payment.status = "PAID";
     order.payment.razorpayPaymentId = razorpay_payment_id;
-    order.payment.razorpaySignature = razorpay_signature;
     order.payment.paidAt = new Date();
 
     await order.save();
 
-    // ✅ Clear cart
     await Cart.updateOne(
       { user: order.user },
       { $set: { items: [], subTotal: 0, grandTotal: 0 } },
     );
 
-    res.json({
-      success: true,
-      message: "Payment verified",
-      order,
-    });
-  } catch (error) {
-    console.error("Verify Payment Error:", error);
+    res.json({ success: true, order });
+  } catch (err) {
     res.status(500).json({ message: "Verification failed" });
   }
 };
@@ -164,18 +135,14 @@ exports.paymentFailed = async (req, res) => {
     const { orderId, reason } = req.body;
 
     const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ message: "Order not found" });
 
     order.payment.status = "FAILED";
-    order.payment.failedReason = reason || "Payment failed";
+    order.payment.failedReason = reason;
 
     await order.save();
 
-    res.json({
-      success: true,
-      message: "Payment marked failed",
-    });
-  } catch (error) {
+    res.json({ success: true });
+  } catch {
     res.status(500).json({ message: "Error updating payment" });
   }
 };
@@ -184,82 +151,106 @@ exports.paymentFailed = async (req, res) => {
 // 🔹 GET MY ORDERS
 //
 exports.getMyOrders = async (req, res) => {
-  try {
-    const orders = await Order.find({ user: req.user._id })
-      .populate("items.product")
-      .sort({ createdAt: -1 });
+  const orders = await Order.find({ user: req.user._id })
+    .populate("items.product")
+    .sort({ createdAt: -1 });
 
-    res.json({ success: true, orders });
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching orders" });
-  }
+  res.json({ success: true, orders });
 };
 
 //
 // 🔹 GET SINGLE ORDER
 //
 exports.getOrder = async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.id).populate("items.product");
+  const order = await Order.findById(req.params.id).populate("items.product");
 
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
+  if (!order) return res.status(404).json({ message: "Not found" });
 
-    res.json({ success: true, order });
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching order" });
-  }
+  res.json({ success: true, order });
 };
 
 //
-// 🔹 ADMIN - GET ALL ORDERS
+// 🔹 ADMIN - GET ALL
 //
 exports.getAllOrders = async (req, res) => {
-  try {
-    const orders = await Order.find()
-      .populate("user", "email")
-      .populate("items.product")
-      .sort({ createdAt: -1 });
+  const orders = await Order.find()
+    .populate("user", "email")
+    .sort({ createdAt: -1 });
 
-    res.json({
-      success: true,
-      count: orders.length,
-      orders,
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching orders" });
-  }
+  res.json({ success: true, orders });
 };
 
 //
-// 🔹 UPDATE ORDER STATUS
+// 🔹 ADMIN - UPDATE STATUS
 //
 exports.updateOrderStatus = async (req, res) => {
+  const { status } = req.body;
+
+  const order = await Order.findById(req.params.id);
+
+  order.status = status;
+  await order.save();
+
+  res.json({ success: true, order });
+};
+
+//
+// 🔥 ADMIN - UPDATE ITEMS
+//
+exports.updateOrderItemsByAdmin = async (req, res) => {
   try {
-    const { status } = req.body;
-
-    const allowedStatuses = [
-      "PLACED",
-      "CONFIRMED",
-      "SHIPPED",
-      "OUT_FOR_DELIVERY",
-      "DELIVERED",
-      "CANCELLED",
-    ];
-
-    if (!allowedStatuses.includes(status)) {
-      return res.status(400).json({ message: "Invalid status" });
-    }
+    const { items } = req.body;
 
     const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ message: "Order not found" });
 
-    order.status = status;
+    let subTotal = 0;
+
+    const updatedItems = items.map((item) => {
+      const total = item.quantity * item.sellingPrice;
+      subTotal += total;
+
+      return { ...item, lineTotal: total };
+    });
+
+    order.items = updatedItems;
+    order.subTotal = subTotal;
+    order.totalAmount = subTotal + order.deliveryFee;
+
     await order.save();
 
     res.json({ success: true, order });
-  } catch (error) {
-    res.status(500).json({ message: "Error updating order status" });
+  } catch {
+    res.status(500).json({ message: "Item update failed" });
+  }
+};
+
+//
+// 🔥 ADMIN - ADD TRACKING (FIXED PROPERLY)
+//
+exports.addTrackingUpdate = async (req, res) => {
+  try {
+    const { status, location, note } = req.body;
+
+    const order = await Order.findById(req.params.id);
+
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.trackingUpdates.push({
+      status,
+      location,
+      note,
+      updatedBy: req.user._id,
+    });
+
+    await order.save();
+
+    res.json({
+      success: true,
+      message: "Tracking updated",
+      order,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Tracking failed" });
   }
 };
