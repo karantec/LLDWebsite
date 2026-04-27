@@ -39,7 +39,7 @@ app.use(express.urlencoded({ extended: true }));
    Health Check
 ======================= */
 app.get("/", (req, res) => {
-  res.send("You are connected to Minutos server");
+  res.send("You are connected to Printsy server");
 });
 
 app.use((req, res, next) => {
