@@ -15,7 +15,7 @@ exports.createOrder = async (req, res) => {
     if (!items || items.length === 0) {
       return res.status(400).json({ message: "No items provided" });
     }
-
+    console.log("REQ ITEMS:", JSON.stringify(items, null, 2));
     const products = await Product.find({
       _id: { $in: items.map((i) => i.product) },
     });
