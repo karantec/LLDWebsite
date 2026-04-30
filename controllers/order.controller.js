@@ -9,6 +9,7 @@ const crypto = require("crypto");
 //
 exports.createOrder = async (req, res) => {
   try {
+    console.log("🔥 NEW CREATE ORDER HIT");
     const userId = req.user._id;
     const { items, shippingAddress, paymentMethod } = req.body;
 
