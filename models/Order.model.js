@@ -17,6 +17,14 @@ const OrderItemSchema = new mongoose.Schema(
 
     quantity: Number,
     lineTotal: Number,
+
+    // 🔥 ADD THIS
+    designs: [
+      {
+        config: { type: Object, default: {} },
+        quantity: { type: Number, default: 1 },
+      },
+    ],
   },
   { _id: false },
 );

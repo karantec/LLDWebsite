@@ -25,7 +25,19 @@ exports.createOrder = async (req, res) => {
     const orderItems = items.map((item) => {
       const product = products.find((p) => p._id.toString() === item.product);
 
-      const lineTotal = product.price * item.quantity;
+      let totalQty = 0;
+      let lineTotal = 0;
+
+      const designs = (item.designs || []).map((d) => {
+        totalQty += d.quantity;
+        lineTotal += product.price * d.quantity;
+
+        return {
+          config: d.config || {},
+          quantity: d.quantity || 1,
+        };
+      });
+
       subTotal += lineTotal;
 
       return {
@@ -36,8 +48,11 @@ exports.createOrder = async (req, res) => {
         mrp: product.originalPrice,
         sellingPrice: product.price,
         discount: product.discount,
-        quantity: item.quantity,
+
+        quantity: totalQty,
         lineTotal,
+
+        designs, // 🔥 IMPORTANT
       };
     });
 
