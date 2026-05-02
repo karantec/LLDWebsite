@@ -15,6 +15,7 @@ router.post("/add", addTestimonial);
 // Website
 router.get("/get", getTestimonials);
 
+router.put("/update/:id", updateTestimonial);
 // Optional
 router.delete("/delete/:id", deleteTestimonial);
 

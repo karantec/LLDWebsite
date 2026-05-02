@@ -30,7 +30,25 @@ exports.addTestimonial = async (req, res) => {
     });
   }
 };
+exports.updateTestimonial = async (req, res) => {
+  try {
+    const updated = await Testimonial.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true },
+    );
 
+    res.json({
+      success: true,
+      data: updated,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
 // 🔹 GET ALL TESTIMONIALS (Website)
 exports.getTestimonials = async (req, res) => {
   try {
