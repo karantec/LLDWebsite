@@ -24,6 +24,7 @@ const ComplaintSetting = require("./routes/Complain.route");
 const SubCategory = require("./routes/subCategory.routes");
 const Cart = require("./routes/cart.routes");
 const Coupans = require("./routes/Coupan.routes");
+const testimonialRoutes = require("./routes/Testimonial.route");
 
 const Order = require("./routes/order.routes");
 /* =======================
@@ -62,6 +63,7 @@ app.use("/api/subcategory", SubCategory);
 app.use("/api/product", Products);
 app.use("/api/offercode", Coupans);
 
+app.use("/api/testimonials", testimonialRoutes);
 // app.use("/api/vendor", Vendor);
 app.use("/api/cart", Cart);
 app.use("/api/order", Order);

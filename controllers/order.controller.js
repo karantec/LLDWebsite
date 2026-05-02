@@ -275,3 +275,58 @@ exports.addTrackingUpdate = async (req, res) => {
     res.status(500).json({ message: "Tracking failed" });
   }
 };
+// 🔹 CANCEL ORDER
+exports.cancelOrder = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    // 🔒 Only owner can cancel
+    if (order.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    // ❌ Prevent cancel if already delivered
+    if (order.status === "DELIVERED") {
+      return res.status(400).json({ message: "Cannot cancel delivered order" });
+    }
+
+    // ❌ Prevent duplicate cancel
+    if (order.status === "CANCELLED") {
+      return res.status(400).json({ message: "Order already cancelled" });
+    }
+
+    // 🔄 Update status
+    order.status = "CANCELLED";
+
+    // 💰 Handle refund logic (if online payment)
+    if (order.payment.method === "ONLINE" && order.payment.status === "PAID") {
+      order.payment.status = "REFUND_PENDING";
+    }
+
+    // 🧾 Optional: save cancel reason
+    order.cancelReason = reason || "User cancelled";
+
+    // 📦 Add tracking update
+    order.trackingUpdates.push({
+      status: "CANCELLED",
+      note: reason || "Order cancelled by user",
+      updatedBy: req.user._id,
+    });
+
+    await order.save();
+
+    res.json({
+      success: true,
+      message: "Order cancelled successfully",
+      order,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Cancel order failed" });
+  }
+};

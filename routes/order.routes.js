@@ -9,7 +9,7 @@ const { protect, admin } = require("../middleware/auth.middleware");
 router.post("/create", protect, orderCtrl.createOrder);
 router.post("/verify-payment", protect, orderCtrl.verifyPayment);
 router.post("/payment-failed", protect, orderCtrl.paymentFailed);
-
+router.put("/cancel/:id", protect, orderCtrl.cancelOrder);
 router.get("/my-orders", protect, orderCtrl.getMyOrders);
 router.get("/:id", protect, orderCtrl.getOrder);
 
