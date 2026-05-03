@@ -14,6 +14,6 @@ router.post("/create", createCoupon);
 router.post("/apply", applyCoupon);
 
 // 👉 Get all coupons (Admin)
-router.get("/", protect, admin, getCoupons);
+router.get("/", getCoupons);
 
 module.exports = router;
