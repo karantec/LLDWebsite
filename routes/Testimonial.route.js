@@ -7,6 +7,7 @@ const {
   addTestimonial,
   getTestimonials,
   deleteTestimonial,
+  updateTestimonial,
 } = require("../controllers/Testimonial.Controller");
 
 // Dashboard
