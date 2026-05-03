@@ -8,7 +8,7 @@ const { protect, admin } = require("../middleware/auth.middleware");
 const router = express.Router();
 
 // 👉 Create coupon (Admin)
-router.post("/create", protect, admin, createCoupon);
+router.post("/create", createCoupon);
 
 // 👉 Apply coupon (User)
 router.post("/apply", applyCoupon);
