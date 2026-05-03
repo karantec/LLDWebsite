@@ -50,8 +50,17 @@ const complaintSchema = new mongoose.Schema(
     attachments: { type: [attachmentSchema], default: [] },
     adminNotes: { type: String, trim: true, default: "" },
     resolution: { type: String, trim: true, default: "" },
+    resolvedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true },
 );
+
+// Add index for better query performance
+complaintSchema.index({ status: 1, createdAt: -1 });
+complaintSchema.index({ priority: 1 });
+complaintSchema.index({ category: 1 });
 
 module.exports = mongoose.model("Complaint", complaintSchema);

@@ -4,7 +4,7 @@ const {
   getCoupons,
   applyCoupon,
 } = require("../controllers/promo.controller");
-const { protect, admin } = require("../middleware/auth.middleware");
+
 const router = express.Router();
 
 // 👉 Create coupon (Admin)
