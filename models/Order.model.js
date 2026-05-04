@@ -51,14 +51,13 @@ const PaymentSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
-        "NOT_INITIATED",
-        "CREATED",
         "PENDING",
         "PAID",
         "FAILED",
-        "REFUNDED",
+        "REFUND_PENDING", // ✅ add this
+        "REFUNDED", // ✅ optional (recommended)
       ],
-      default: "NOT_INITIATED",
+      default: "PENDING",
     },
     razorpayOrderId: String,
     razorpayPaymentId: String,
