@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 
+/* ================= ORDER ITEM ================= */
 const OrderItemSchema = new mongoose.Schema(
   {
     product: {
@@ -18,7 +19,6 @@ const OrderItemSchema = new mongoose.Schema(
     quantity: Number,
     lineTotal: Number,
 
-    // 🔥 ADD THIS
     designs: [
       {
         config: { type: Object, default: {} },
@@ -29,6 +29,7 @@ const OrderItemSchema = new mongoose.Schema(
   { _id: false },
 );
 
+/* ================= ADDRESS ================= */
 const AddressSchema = new mongoose.Schema(
   {
     name: String,
@@ -41,6 +42,7 @@ const AddressSchema = new mongoose.Schema(
   { _id: false },
 );
 
+/* ================= PAYMENT ================= */
 const PaymentSchema = new mongoose.Schema(
   {
     method: {
@@ -48,31 +50,42 @@ const PaymentSchema = new mongoose.Schema(
       enum: ["COD", "ONLINE"],
       required: true,
     },
+
+    // ✅ FIXED: full lifecycle
     status: {
       type: String,
       enum: [
-        "PENDING",
-        "PAID",
-        "FAILED",
-        "REFUND_PENDING", // ✅ add this
-        "REFUNDED", // ✅ optional (recommended)
+        "NOT_INITIATED", // before payment
+        "CREATED", // Razorpay order created
+        "PENDING", // waiting / COD
+        "PAID", // success
+        "FAILED", // failed
+        "REFUND_PENDING", // refund started
+        "REFUNDED", // refund completed
       ],
-      default: "PENDING",
+      default: "NOT_INITIATED",
     },
+
     razorpayOrderId: String,
     razorpayPaymentId: String,
+
     amount: Number,
     currency: { type: String, default: "INR" },
+
     paidAt: Date,
+
+    // ✅ NEW (you were using these but missing in schema)
+    refundRequestedAt: Date,
+    refundReason: String,
   },
   { _id: false },
 );
 
-/* 🔥 NEW: TRACKING SCHEMA */
+/* ================= TRACKING ================= */
 const TrackingSchema = new mongoose.Schema(
   {
-    status: String, // e.g. Shipped, Out for delivery
-    location: String, // Delhi, Bangalore
+    status: String,
+    location: String,
     note: String,
     updatedAt: {
       type: Date,
@@ -86,6 +99,7 @@ const TrackingSchema = new mongoose.Schema(
   { _id: false },
 );
 
+/* ================= ORDER ================= */
 const OrderSchema = new mongoose.Schema(
   {
     user: {
@@ -117,10 +131,17 @@ const OrderSchema = new mongoose.Schema(
 
     payment: PaymentSchema,
 
-    /* 🔥 NEW FIELD */
     trackingUpdates: {
       type: [TrackingSchema],
       default: [],
+    },
+
+    // ✅ NEW (you used these in cancel API)
+    cancelReason: String,
+    cancelledAt: Date,
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
 
     notes: String,

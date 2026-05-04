@@ -19,12 +19,19 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ message: "No items provided" });
     }
 
-    // ✅ FIXED: correct fields
+    // ✅ Validate payment method
+    if (!["COD", "ONLINE"].includes(paymentMethod)) {
+      return res.status(400).json({
+        message: "Invalid payment method",
+      });
+    }
+
+    // ✅ Validate address
     if (
       !shippingAddress ||
       !shippingAddress.name ||
       !shippingAddress.phone ||
-      !shippingAddress.line1 || // ✅ FIXED
+      !shippingAddress.line1 ||
       !shippingAddress.city ||
       !shippingAddress.state ||
       !shippingAddress.pincode
@@ -54,7 +61,6 @@ exports.createOrder = async (req, res) => {
 
       const designs = (item.designs || []).map((d) => {
         const qty = d.quantity || 1;
-
         totalQty += qty;
         lineTotal += product.price * qty;
 
@@ -64,7 +70,7 @@ exports.createOrder = async (req, res) => {
         };
       });
 
-      // ✅ fallback if no designs sent
+      // fallback
       if (!item.designs || item.designs.length === 0) {
         totalQty = item.quantity || 1;
         lineTotal = product.price * totalQty;
@@ -89,16 +95,20 @@ exports.createOrder = async (req, res) => {
     const deliveryFee = 50;
     const totalAmount = subTotal + deliveryFee;
 
-    // ✅ FIX: match schema structure
     let paymentData = {
-      method: paymentMethod, // expects "COD" or "ONLINE"
-      status: "NOT_INITIATED",
+      method: paymentMethod,
       amount: totalAmount,
       currency: "INR",
     };
 
     let razorpayOrder = null;
 
+    // ✅ COD FLOW (FIXED)
+    if (paymentMethod === "COD") {
+      paymentData.status = "PENDING"; // ✅ FIXED (not NOT_INITIATED)
+    }
+
+    // ✅ ONLINE FLOW
     if (paymentMethod === "ONLINE") {
       razorpayOrder = await razorpay.orders.create({
         amount: totalAmount * 100,
@@ -124,7 +134,14 @@ exports.createOrder = async (req, res) => {
       shippingAddress,
       payment: paymentData,
       status: "PLACED",
-      trackingUpdates: [],
+      trackingUpdates: [
+        {
+          status: "PLACED",
+          location: "System",
+          note: "Order placed successfully",
+          updatedBy: userId,
+        },
+      ],
     });
 
     res.status(201).json({
