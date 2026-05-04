@@ -41,6 +41,8 @@ const createComplaint = asyncHandler(async (req, res) => {
   const {
     title,
     description,
+    orderId,
+    productName,
     category,
     priority,
     status,
@@ -60,6 +62,8 @@ const createComplaint = asyncHandler(async (req, res) => {
   const complaint = await Complaint.create({
     title,
     description,
+    orderId,
+    productName,
     category,
     priority,
     status,
@@ -85,6 +89,8 @@ const updateComplaint = asyncHandler(async (req, res) => {
   const allowedFields = [
     "title",
     "description",
+    "orderId",
+    "productName",
     "category",
     "priority",
     "status",
@@ -116,6 +122,39 @@ const deleteComplaint = asyncHandler(async (req, res) => {
 
   await complaint.deleteOne();
   sendSuccess(res, { message: "Complaint deleted successfully" });
+});
+
+/**
+ * GET /api/complaints/order/:orderId
+ * Returns complaints filtered by order ID
+ */
+const getComplaintsByOrderId = asyncHandler(async (req, res) => {
+  const { orderId } = req.params;
+
+  if (!orderId) {
+    return sendError(res, "Order ID is required", 400);
+  }
+
+  const complaints = await Complaint.find({ orderId }).sort({ createdAt: -1 });
+  sendSuccess(res, complaints);
+});
+
+/**
+ * GET /api/complaints/product/:productName
+ * Returns complaints filtered by product name (partial match)
+ */
+const getComplaintsByProductName = asyncHandler(async (req, res) => {
+  const { productName } = req.params;
+
+  if (!productName) {
+    return sendError(res, "Product name is required", 400);
+  }
+
+  const complaints = await Complaint.find({
+    productName: { $regex: productName, $options: "i" },
+  }).sort({ createdAt: -1 });
+
+  sendSuccess(res, complaints);
 });
 
 // ─── New Status Management Controllers ─────────────────────────────────────────────
@@ -318,6 +357,10 @@ module.exports = {
   createComplaint,
   updateComplaint,
   deleteComplaint,
+
+  // New exports for order/product filtering
+  getComplaintsByOrderId,
+  getComplaintsByProductName,
 
   // New exports for status management
   updateComplaintStatus,

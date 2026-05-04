@@ -17,6 +17,17 @@ const complaintSchema = new mongoose.Schema(
       required: [true, "Description is required"],
       trim: true,
     },
+    orderId: {
+      type: String,
+      trim: true,
+      default: "",
+      index: true, // Add index for faster queries by orderId
+    },
+    productName: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     category: {
       type: String,
       required: [true, "Category is required"],
@@ -62,5 +73,6 @@ const complaintSchema = new mongoose.Schema(
 complaintSchema.index({ status: 1, createdAt: -1 });
 complaintSchema.index({ priority: 1 });
 complaintSchema.index({ category: 1 });
+complaintSchema.index({ orderId: 1 }); // Index for orderId
 
 module.exports = mongoose.model("Complaint", complaintSchema);

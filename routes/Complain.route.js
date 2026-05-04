@@ -11,6 +11,8 @@ const {
   getComplaintsByStatus,
   getComplaintsByPriority,
   getComplaintStats,
+  getComplaintsByOrderId,
+  getComplaintsByProductName,
 } = require("../controllers/Complaint.Controller");
 
 const router = express.Router();
@@ -36,5 +38,9 @@ router.patch("/:id/resolution", updateResolution); // Update resolution notes
 router.get("/filter/status/:status", getComplaintsByStatus); // Get by status
 router.get("/filter/priority/:priority", getComplaintsByPriority); // Get by priority
 router.get("/stats/summary", getComplaintStats); // Get statistics
+
+// Order and Product filtering routes (NEW)
+router.get("/order/:orderId", getComplaintsByOrderId); // Get complaints by order ID
+router.get("/product/:productName", getComplaintsByProductName); // Get complaints by product name
 
 module.exports = router;
