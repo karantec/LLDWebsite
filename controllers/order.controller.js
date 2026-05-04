@@ -10,26 +10,32 @@ const crypto = require("crypto");
 exports.createOrder = async (req, res) => {
   try {
     console.log("🔥 NEW CREATE ORDER HIT");
+
     const userId = req.user._id;
     const { items, shippingAddress, paymentMethod } = req.body;
 
+    // ✅ Validate items
     if (!items || items.length === 0) {
       return res.status(400).json({ message: "No items provided" });
     }
 
-    // Validate shipping address
+    // ✅ FIXED: correct fields
     if (
       !shippingAddress ||
-      !shippingAddress.address ||
+      !shippingAddress.name ||
+      !shippingAddress.phone ||
+      !shippingAddress.line1 || // ✅ FIXED
       !shippingAddress.city ||
-      !shippingAddress.phone
+      !shippingAddress.state ||
+      !shippingAddress.pincode
     ) {
-      return res
-        .status(400)
-        .json({ message: "Complete shipping address is required" });
+      return res.status(400).json({
+        message: "Complete shipping address is required",
+      });
     }
 
     console.log("REQ ITEMS:", JSON.stringify(items, null, 2));
+
     const products = await Product.find({
       _id: { $in: items.map((i) => i.product) },
     });
@@ -47,14 +53,22 @@ exports.createOrder = async (req, res) => {
       let lineTotal = 0;
 
       const designs = (item.designs || []).map((d) => {
-        totalQty += d.quantity;
-        lineTotal += product.price * d.quantity;
+        const qty = d.quantity || 1;
+
+        totalQty += qty;
+        lineTotal += product.price * qty;
 
         return {
           config: d.config || {},
-          quantity: d.quantity || 1,
+          quantity: qty,
         };
       });
+
+      // ✅ fallback if no designs sent
+      if (!item.designs || item.designs.length === 0) {
+        totalQty = item.quantity || 1;
+        lineTotal = product.price * totalQty;
+      }
 
       subTotal += lineTotal;
 
@@ -75,8 +89,9 @@ exports.createOrder = async (req, res) => {
     const deliveryFee = 50;
     const totalAmount = subTotal + deliveryFee;
 
+    // ✅ FIX: match schema structure
     let paymentData = {
-      method: paymentMethod,
+      method: paymentMethod, // expects "COD" or "ONLINE"
       status: "NOT_INITIATED",
       amount: totalAmount,
       currency: "INR",
@@ -96,6 +111,7 @@ exports.createOrder = async (req, res) => {
         status: "CREATED",
         razorpayOrderId: razorpayOrder.id,
         amount: totalAmount,
+        currency: "INR",
       };
     }
 
@@ -111,13 +127,18 @@ exports.createOrder = async (req, res) => {
       trackingUpdates: [],
     });
 
-    res.status(201).json({ success: true, order, razorpayOrder });
+    res.status(201).json({
+      success: true,
+      order,
+      razorpayOrder,
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message || "Create order failed" });
+    console.error("❌ CREATE ORDER ERROR:", err);
+    res.status(500).json({
+      message: err.message || "Create order failed",
+    });
   }
 };
-
 //
 // 🔹 VERIFY PAYMENT
 //
