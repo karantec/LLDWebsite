@@ -21,7 +21,20 @@ const WholeSalerSchema = new mongoose.Schema(
     pin: {
       type: String,
       required: [true, "PIN is required"],
-      select: false, // hide in queries
+      // No hashing - store as plain text
+    },
+
+    phoneNumber: {
+      type: String,
+      required: [true, "Phone number is required"],
+      unique: true,
+      trim: true,
+      validate: {
+        validator: function (v) {
+          return /^[0-9]{10}$/.test(v);
+        },
+        message: "Please enter a valid 10-digit phone number",
+      },
     },
 
     city: {
