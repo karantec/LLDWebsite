@@ -22,6 +22,7 @@ const Category = require("./routes/category.routes");
 const Products = require("./routes/product.routes");
 const ComplaintSetting = require("./routes/Complain.route");
 const SubCategory = require("./routes/subCategory.routes");
+const WholeSalerRoutes = require("./routes/WholeSaler.route");
 const Cart = require("./routes/cart.routes");
 const Coupans = require("./routes/Coupan.routes");
 const testimonialRoutes = require("./routes/Testimonial.route");
@@ -69,6 +70,7 @@ app.use("/api/cart", Cart);
 app.use("/api/order", Order);
 app.use("/api/complaint", ComplaintSetting);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/wholesaler", WholeSalerRoutes);
 
 /* =======================
    🔥 ADD THIS: Route Listing API (DEV ONLY)
