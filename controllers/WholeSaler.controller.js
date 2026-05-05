@@ -68,7 +68,7 @@ exports.registerWholeSaler = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 exports.loginWholeSaler = async (req, res) => {
   try {
-    const { email, pin } = req.body;
+    const { phoneNumber, pin } = req.body;
 
     if (!email || !pin) {
       return res.status(400).json({ message: "Email and PIN required" });
