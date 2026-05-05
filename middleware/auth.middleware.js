@@ -54,18 +54,6 @@ const admin = (req, res, next) => {
   next();
 };
 
-/**
- * DELIVERY AGENT only
- */
-
-/**
- * ACCEPTED vendors only  (use after protectVendor)
- * Useful if you want PENDING vendors to log in but not access certain routes.
- *
- * Usage:  router.get("/dashboard", protectVendor, acceptedVendorOnly, handler)
- */
-
-// ─────────────────────────────────────────────────────────────────────────────
 module.exports = {
   // user
   protect,

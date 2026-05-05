@@ -18,7 +18,7 @@ router.post("/login", loginWholeSaler);
 // Protected routes
 router.get("/me", getCurrentWholesaler);
 router.get("/", getAllWholesalers);
-router.get("/:id", protect, admin, getWholesalerById);
+router.get("/:id", protect, admin, admin, getWholesalerById);
 router.put("/:id", protect, admin, updateWholesaler);
 router.delete("/:id", protect, admin, deleteWholesaler);
 
