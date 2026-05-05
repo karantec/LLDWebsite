@@ -55,13 +55,17 @@ const addToCart = async (req, res) => {
 
     if (index > -1) {
       // 🔥 PUSH new designs
+      if (!cart.items[index].customizations) {
+        cart.items[index].customizations = product.customizations || [];
+      }
       cart.items[index].designs.push(...configs);
     } else {
       cart.items.push({
         productId: product._id,
         name: product.name,
         image: product.images?.[0] || "",
-        price: product.price,
+        price: product.discountedMRP || product.price,
+        customizations: product.customizations || [], // ✅ ADD THIS
         designs: configs,
       });
     }

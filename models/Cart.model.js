@@ -11,6 +11,8 @@ const cartItemSchema = new mongoose.Schema({
 
   price: { type: Number, required: true },
 
+  customizations: { type: Array, default: [] }, // ✅ ADD THIS
+
   // 🔥 NEW: designs array
   designs: [
     {
@@ -44,13 +46,33 @@ const cartSchema = new mongoose.Schema(
 
 cartSchema.pre("save", function (next) {
   this.subTotal = this.items.reduce((sum, item) => {
-  const itemTotal = item.designs.reduce(
-    (dSum, d) => dSum + d.quantity * item.price,
-    0
-  );
-  return sum + itemTotal;
-}, 0);
+    const itemTotal = item.designs.reduce((dSum, d) => {
+      let adjustment = 0;
+
+      item.customizations?.forEach((field) => {
+        const selected = d.config?.[field.label];
+
+        if (!selected) return;
+
+        if (Array.isArray(selected)) {
+          selected.forEach((val) => {
+            const opt = field.options?.find((o) => o.label === val);
+            adjustment += opt?.priceAdjustment || 0;
+          });
+        } else {
+          const opt = field.options?.find((o) => o.label === selected);
+          adjustment += opt?.priceAdjustment || 0;
+        }
+      });
+
+      return dSum + (item.price + adjustment) * d.quantity;
+    }, 0);
+
+    return sum + itemTotal;
+  }, 0);
+
   this.grandTotal = this.subTotal + this.deliveryFee;
+
   next();
 });
 
