@@ -414,7 +414,7 @@ exports.cancelOrder = async (req, res) => {
 //
 exports.getAllOrders = async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
+    const { status } = req.query;
 
     let query = {};
     if (status) {
@@ -423,17 +423,13 @@ exports.getAllOrders = async (req, res) => {
 
     const orders = await Order.find(query)
       .populate("user", "name email phone")
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .sort({ createdAt: -1 });
 
     const total = await Order.countDocuments(query);
 
     res.json({
       success: true,
       orders,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
       total,
     });
   } catch (err) {
@@ -441,7 +437,6 @@ exports.getAllOrders = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch orders" });
   }
 };
-
 //
 // 🔹 ADMIN - UPDATE ORDER STATUS
 //
