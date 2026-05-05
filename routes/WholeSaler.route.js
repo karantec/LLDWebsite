@@ -9,18 +9,14 @@ const {
   deleteWholesaler,
   getCurrentWholesaler,
 } = require("../controllers/WholeSaler.controller");
-const {
-  protectWholesaler,
-  admin,
-  protect,
-} = require("../middleware/auth.middleware");
+const { admin, protect } = require("../middleware/auth.middleware");
 
 // Public routes
 router.post("/register", registerWholeSaler);
 router.post("/login", loginWholeSaler);
 
 // Protected routes
-router.get("/me", protectWholesaler, getCurrentWholesaler);
+router.get("/me", getCurrentWholesaler);
 router.get("/", getAllWholesalers);
 router.get("/:id", protect, admin, getWholesalerById);
 router.put("/:id", protect, admin, updateWholesaler);
