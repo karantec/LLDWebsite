@@ -8,7 +8,7 @@ const {
   updateWholesaler,
   deleteWholesaler,
   getCurrentWholesaler,
-} = require("../controllers/wholesaler.controller");
+} = require("../controllers/WholeSaler.controller");
 const {
   protectWholesaler,
   admin,
