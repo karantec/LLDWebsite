@@ -100,7 +100,7 @@ const existing = cart.items[index].designs.find(
         designs: normalizedConfigs.map((c) => ({
           config: c.config,
           quantity: c.quantity || 1,
-          offers: offers.map(o => o._id),
+          offers: offers || [],
         })),
       });
     }
