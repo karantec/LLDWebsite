@@ -31,7 +31,7 @@ const userCart = async (req, res) => {
 
 // ---------------- ADD TO CART ----------------
 const addToCart = async (req, res) => {
-  const { userId, productId, configs = [] } = req.body;
+  const { userId, productId, configs = [], offers = [] } = req.body;
 
   if (!userId || !productId)
     return res.status(400).json({ message: "Missing fields" });
@@ -40,6 +40,11 @@ const addToCart = async (req, res) => {
   if (!configs || configs.length === 0) {
     return res.status(400).json({ message: "No configurations provided" });
   }
+
+  const normalizedConfigs = configs.map((c) => ({
+    config: c.config || c,
+    quantity: c.quantity || 1,
+  }));
 
   try {
     let cart = await Cart.findOne({ user: userId });
@@ -58,15 +63,31 @@ const addToCart = async (req, res) => {
       if (!cart.items[index].customizations) {
         cart.items[index].customizations = product.customizations || [];
       }
-      configs.forEach((newDesign) => {
-        const existing = cart.items[index].designs.find(
-          (d) => JSON.stringify(d.config) === JSON.stringify(newDesign.config),
-        );
+      normalizedConfigs.forEach((newDesign) => {
+        const designWithOffers = {
+          config: newDesign.config,
+          quantity: newDesign.quantity || 1,
+          offers: offers || [],
+        };
+
+        const isSameConfig = (a, b) =>
+  JSON.stringify(Object.keys(a).sort().reduce((o, k) => (o[k] = a[k], o), {})) ===
+  JSON.stringify(Object.keys(b).sort().reduce((o, k) => (o[k] = b[k], o), {}));
+
+const isSameOffers = (a = [], b = []) =>
+  JSON.stringify(a.map(o => o._id || o).sort()) ===
+  JSON.stringify(b.map(o => o._id || o).sort());
+
+const existing = cart.items[index].designs.find(
+  (d) =>
+    isSameConfig(d.config, newDesign.config) &&
+    isSameOffers(d.offers, offers)
+);
 
         if (existing) {
           existing.quantity += newDesign.quantity || 1;
         } else {
-          cart.items[index].designs.push(newDesign);
+          cart.items[index].designs.push(designWithOffers);
         }
       });
     } else {
@@ -76,7 +97,11 @@ const addToCart = async (req, res) => {
         image: product.images?.[0] || "",
         price: product.discountedMRP || product.price,
         customizations: product.customizations || [], // ✅ ADD THIS
-        designs: configs,
+        designs: normalizedConfigs.map((c) => ({
+          config: c.config,
+          quantity: c.quantity || 1,
+          offers: offers.map(o => o._id),
+        })),
       });
     }
 
@@ -96,9 +121,6 @@ const addToCart = async (req, res) => {
 // ---------------- UPDATE QUANTITY ----------------
 const updateQuantity = async (req, res) => {
   const { userId, productId, designId, quantity } = req.body;
-
-  if (!userId || !productId || quantity <= 0)
-    return res.status(400).json({ message: "Invalid request" });
 
   try {
     if (!userId || !productId || !designId) {

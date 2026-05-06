@@ -15,17 +15,17 @@ const cartItemSchema = new mongoose.Schema({
 
   // 🔥 NEW: designs array
   designs: [
-  {
-    _id: {
-      type: mongoose.Schema.Types.ObjectId,
-      auto: true,
+    {
+      _id: {
+        type: mongoose.Schema.Types.ObjectId,
+        auto: true,
+      },
+      config: { type: Object, default: {} },
+      quantity: { type: Number, default: 1 },
+      offers: { type: Array, default: [] },
     },
-    config: { type: Object, default: {} },
-    quantity: { type: Number, default: 1 },
-  },
-],
+  ],
 });
-
 
 const cartSchema = new mongoose.Schema(
   {
@@ -45,7 +45,7 @@ const cartSchema = new mongoose.Schema(
       default: "active",
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 cartSchema.pre("save", function (next) {
@@ -69,13 +69,22 @@ cartSchema.pre("save", function (next) {
         }
       });
 
-      return dSum + (item.price + adjustment) * d.quantity;
+      let price = item.price + adjustment;
+
+      // 🔥 APPLY OFFERS
+      (d.offers || []).forEach((offer) => {
+        if (offer.discountPercent) {
+          price = price - (price * offer.discountPercent) / 100;
+        }
+      });
+
+      return dSum + price * d.quantity;
     }, 0);
 
     return sum + itemTotal;
   }, 0);
 
-  this.grandTotal = this.subTotal + this.deliveryFee;
+  this.grandTotal = this.subTotal + (this.deliveryFee || 0);
 
   next();
 });
