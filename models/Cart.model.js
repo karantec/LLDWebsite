@@ -15,11 +15,15 @@ const cartItemSchema = new mongoose.Schema({
 
   // 🔥 NEW: designs array
   designs: [
-    {
-      config: { type: Object, default: {} },
-      quantity: { type: Number, default: 1 },
+  {
+    _id: {
+      type: mongoose.Schema.Types.ObjectId,
+      auto: true,
     },
-  ],
+    config: { type: Object, default: {} },
+    quantity: { type: Number, default: 1 },
+  },
+],
 });
 
 

@@ -46,8 +46,8 @@ const addToCart = async (req, res) => {
     if (!cart) cart = new Cart({ user: userId });
 
     const product = await Product.findById(productId).lean();
-    console.log("PRICE GOING INTO CART:", product.price);
     if (!product) return res.status(404).json({ message: "Product not found" });
+    console.log("PRICE GOING INTO CART:", product.price);
 
     const index = cart.items.findIndex(
       (i) => i.productId.toString() === productId,
@@ -58,7 +58,17 @@ const addToCart = async (req, res) => {
       if (!cart.items[index].customizations) {
         cart.items[index].customizations = product.customizations || [];
       }
-      cart.items[index].designs.push(...configs);
+      configs.forEach((newDesign) => {
+        const existing = cart.items[index].designs.find(
+          (d) => JSON.stringify(d.config) === JSON.stringify(newDesign.config),
+        );
+
+        if (existing) {
+          existing.quantity += newDesign.quantity || 1;
+        } else {
+          cart.items[index].designs.push(newDesign);
+        }
+      });
     } else {
       cart.items.push({
         productId: product._id,
@@ -85,12 +95,20 @@ const addToCart = async (req, res) => {
 
 // ---------------- UPDATE QUANTITY ----------------
 const updateQuantity = async (req, res) => {
-  const { userId, productId, designIndex, quantity } = req.body;
+  const { userId, productId, designId, quantity } = req.body;
 
   if (!userId || !productId || quantity <= 0)
     return res.status(400).json({ message: "Invalid request" });
 
   try {
+    if (!userId || !productId || !designId) {
+      return res.status(400).json({ message: "Missing fields" });
+    }
+
+    if (!quantity || isNaN(quantity) || quantity <= 0) {
+      return res.status(400).json({ message: "Invalid quantity" });
+    }
+
     const cart = await Cart.findOne({ user: userId });
     if (!cart) return res.status(404).json({ message: "Cart not found" });
 
@@ -98,15 +116,10 @@ const updateQuantity = async (req, res) => {
 
     if (!item) return res.status(404).json({ message: "Item not found" });
 
-    if (
-      designIndex === undefined ||
-      !item.designs ||
-      !item.designs[designIndex]
-    ) {
-      return res.status(404).json({ message: "Design not found" });
-    }
+    const design = item.designs.id(designId);
+    if (!design) return res.status(404).json({ message: "Design not found" });
 
-    item.designs[designIndex].quantity = Number(quantity);
+    design.quantity = Number(quantity);
 
     await cart.save();
 
@@ -123,7 +136,7 @@ const updateQuantity = async (req, res) => {
 
 // ---------------- REMOVE FROM CART ----------------
 const removeFromCart = async (req, res) => {
-  const { userId, productId, designIndex } = req.body;
+  const { userId, productId, designId } = req.body;
 
   try {
     const cart = await Cart.findOne({ user: userId });
@@ -133,19 +146,11 @@ const removeFromCart = async (req, res) => {
 
     if (!item) return res.status(404).json({ message: "Item not found" });
 
-    // 🔥 REMOVE SPECIFIC DESIGN
-    if (
-      designIndex === undefined ||
-      !item.designs ||
-      !item.designs[designIndex]
-    ) {
-      return res.status(400).json({ message: "Invalid design index" });
-    }
+    // 🔥 REMOVE SPECIFIC DESIGN BY ID
+    item.designs = item.designs.filter((d) => d._id.toString() !== designId);
 
-    item.designs.splice(designIndex, 1);
-
-    // 🔥 If no designs left → remove product
-    if (!item.designs || item.designs.length === 0) {
+    // 🔥 If no designs left → remove product completely
+    if (item.designs.length === 0) {
       cart.items = cart.items.filter(
         (i) => i.productId.toString() !== productId,
       );
