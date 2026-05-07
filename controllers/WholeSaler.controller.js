@@ -70,18 +70,20 @@ exports.loginWholeSaler = async (req, res) => {
   try {
     const { phoneNumber, pin } = req.body;
 
-    if (!email || !pin) {
-      return res.status(400).json({ message: "Email and PIN required" });
+    if (!phoneNumber || !pin) {
+      return res
+        .status(400)
+        .json({ message: "Phone number and PIN required" });
     }
 
-    // Find wholesaler
-    const wholesaler = await WholeSaler.findOne({ email });
+    // Find wholesaler using phone number
+    const wholesaler = await WholeSaler.findOne({ phoneNumber });
 
     if (!wholesaler) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Direct PIN comparison (no hashing)
+    // Compare PIN
     if (wholesaler.pin !== pin) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
