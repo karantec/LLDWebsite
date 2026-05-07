@@ -96,7 +96,6 @@ exports.loginWholeSaler = async (req, res) => {
         id: wholesaler._id,
         storeName: wholesaler.storeName,
         email: wholesaler.email,
-        pin: wholesaler.pin,
         phoneNumber: wholesaler.phoneNumber,
         city: wholesaler.city,
         address: wholesaler.address,
