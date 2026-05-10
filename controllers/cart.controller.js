@@ -41,10 +41,21 @@ const addToCart = async (req, res) => {
     return res.status(400).json({ message: "No configurations provided" });
   }
 
-  const normalizedConfigs = configs.map((c) => ({
-    config: c.config || c,
-    quantity: c.quantity || 1,
-  }));
+  const normalizedConfigs = configs.map((c) => {
+    const rawConfig = c.config || c;
+
+    const cleanedConfig = { ...rawConfig };
+
+    delete cleanedConfig.quantity;
+    delete cleanedConfig.__designId;
+    delete cleanedConfig.designId;
+
+    return {
+      config: cleanedConfig,
+      quantity: c.quantity || 1,
+      designId: c.designId,
+    };
+  });
 
   try {
     let cart = await Cart.findOne({ user: userId });
@@ -70,23 +81,21 @@ const addToCart = async (req, res) => {
           offers: offers || [],
         };
 
-        const isSameConfig = (a, b) =>
-  JSON.stringify(Object.keys(a).sort().reduce((o, k) => (o[k] = a[k], o), {})) ===
-  JSON.stringify(Object.keys(b).sort().reduce((o, k) => (o[k] = b[k], o), {}));
+        // 🔥 IF designId EXISTS → UPDATE EXISTING DESIGN
+        if (newDesign.designId) {
+          const existingDesign = cart.items[index].designs.id(
+            newDesign.designId,
+          );
 
-const isSameOffers = (a = [], b = []) =>
-  JSON.stringify(a.map(o => o._id || o).sort()) ===
-  JSON.stringify(b.map(o => o._id || o).sort());
-
-const existing = cart.items[index].designs.find(
-  (d) =>
-    isSameConfig(d.config, newDesign.config) &&
-    isSameOffers(d.offers, offers)
-);
-
-        if (existing) {
-          existing.quantity += newDesign.quantity || 1;
+          if (existingDesign) {
+            existingDesign.config = newDesign.config;
+            existingDesign.quantity = newDesign.quantity || 1;
+            existingDesign.offers = offers || [];
+          } else {
+            cart.items[index].designs.push(designWithOffers);
+          }
         } else {
+          // 🔥 NEW DESIGN
           cart.items[index].designs.push(designWithOffers);
         }
       });
