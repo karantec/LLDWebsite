@@ -298,18 +298,8 @@ exports.getOrder = async (req, res) => {
 //
 exports.cancelOrder = async (req, res) => {
   try {
-    const { reason } = req.body;
-    const orderId = req.params.id;
-
-    // Validate reason
-    if (!reason || reason.trim() === "") {
-      return res.status(400).json({
-        success: false,
-        message: "Cancellation reason is required",
-      });
-    }
-
-    const order = await Order.findById(orderId);
+    const { status } = req.body;
+    const order = await Order.findById(req.params.id);
 
     if (!order) {
       return res.status(404).json({
@@ -318,93 +308,35 @@ exports.cancelOrder = async (req, res) => {
       });
     }
 
-    // 🔒 Only owner can cancel
-    if (order.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "Unauthorized - You can only cancel your own orders",
-      });
-    }
-
-    // ❌ Prevent cancel if already delivered
-    if (order.status === "DELIVERED") {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Cannot cancel delivered order. Please contact customer support.",
-      });
-    }
-
-    // ❌ Prevent cancel if already shipped (optional - depends on your policy)
-    if (order.status === "SHIPPED") {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Order has already been shipped. Please contact customer support for cancellation.",
-      });
-    }
-
-    // ❌ Prevent duplicate cancel
+    // ❌ Do not allow changes after cancellation
     if (order.status === "CANCELLED") {
       return res.status(400).json({
         success: false,
-        message: "Order is already cancelled",
-        cancelledAt: order.updatedAt,
+        message: "Cancelled order status cannot be changed",
       });
     }
 
-    // Store original status for reference
-    const originalStatus = order.status;
-
-    // 🔄 Update status
-    order.status = "CANCELLED";
-
-    // 💰 Handle refund logic (if online payment)
-    if (order.payment.method === "ONLINE" && order.payment.status === "PAID") {
-      order.payment.status = "REFUND_PENDING";
-      order.payment.refundRequestedAt = new Date();
-      order.payment.refundReason = reason.trim();
+    // ❌ Do not allow changes after delivery
+    if (order.status === "DELIVERED") {
+      return res.status(400).json({
+        success: false,
+        message: "Delivered order status cannot be changed",
+      });
     }
 
-    // 🧾 Save cancel reason and details
-    order.cancelReason = reason.trim();
-    order.cancelledAt = new Date();
-    order.cancelledBy = req.user._id;
-
-    // 📦 Add tracking update
-    order.trackingUpdates.push({
-      status: "CANCELLED",
-      location: "System",
-      note: `Order cancelled by user. Reason: ${reason.trim()}`,
-      updatedBy: req.user._id,
-    });
+    order.status = status;
 
     await order.save();
 
-    // Optional: Restore product quantities if needed
-    // for (const item of order.items) {
-    //   await Product.findByIdAndUpdate(item.product, {
-    //     $inc: { stock: item.quantity }
-    //   });
-    // }
-
     res.json({
       success: true,
-      message: "Order cancelled successfully",
-      order: {
-        id: order._id,
-        status: order.status,
-        cancelReason: order.cancelReason,
-        cancelledAt: order.cancelledAt,
-        refundStatus:
-          order.payment.status === "REFUND_PENDING" ? "Pending" : null,
-      },
+      message: "Status updated successfully",
+      order,
     });
   } catch (err) {
-    console.error("Cancel order error:", err);
     res.status(500).json({
       success: false,
-      message: "Failed to cancel order. Please try again later.",
+      message: "Failed to update status",
     });
   }
 };
