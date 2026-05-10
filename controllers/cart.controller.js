@@ -19,6 +19,18 @@ const userCart = async (req, res) => {
       });
     }
 
+    // Assign designId to designs that don't have it
+cart.items.forEach((item) => {
+  item.designs.forEach((d) => {
+    if (!d.designId) {
+      d.designId = d._id.toString();
+    }
+  });
+});
+
+// Save to persist the changes
+await cart.save();
+
     res.status(200).json({
       items: cart.items,
       subTotal: cart.subTotal,
