@@ -114,6 +114,7 @@ const productSchema = new mongoose.Schema(
     // 🖼️ Media
     image: { type: String, default: "" },
     images: { type: [String], default: [] },
+    canvasimages: { type: [String], default: [] },
     media: { type: [mediaSchema], default: [] },
 
     // 📂 Category
@@ -122,12 +123,20 @@ const productSchema = new mongoose.Schema(
       ref: "Category",
       required: true,
     },
+
+    WholeSaler: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "WholeSaler",
+      required: true,
+    },
     subCategory: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Subcategory",
       required: true,
     },
 
+    wholeSalerDefault: { type: Number, required: true },
+    wholeSalerPrice: { type: Number, required: true },
     // 💰 Pricing
     price: { type: Number, required: true },
     originalPrice: { type: Number, default: null },

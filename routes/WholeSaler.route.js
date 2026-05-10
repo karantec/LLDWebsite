@@ -14,11 +14,11 @@ const { admin, protect } = require("../middleware/auth.middleware");
 // Public routes
 router.post("/register", registerWholeSaler);
 router.post("/login", loginWholeSaler);
+router.get("/", getAllWholesalers); // Made public for product dropdown
 
-// Protected routes
-router.get("/me", getCurrentWholesaler);
-router.get("/", getAllWholesalers);
-router.get("/:id", protect, admin, admin, getWholesalerById);
+// Protected routes (require authentication)
+router.get("/me", protect, getCurrentWholesaler);
+router.get("/:id", protect, admin, getWholesalerById);
 router.put("/:id", protect, admin, updateWholesaler);
 router.delete("/:id", protect, admin, deleteWholesaler);
 

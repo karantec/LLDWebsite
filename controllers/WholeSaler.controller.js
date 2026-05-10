@@ -1,55 +1,51 @@
 const WholeSaler = require("../models/WholeSaler.model");
 const jwt = require("jsonwebtoken");
 
-// 🔐 Generate JWT for wholesaler
-const generateToken = (wholesalerId) => {
-  return jwt.sign({ wholesalerId }, process.env.JWT_SECRET, {
-    expiresIn: "7d",
+// Generate JWT Token
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: "30d",
   });
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ REGISTER WHOLESALER (No hashing - stores plain text PIN)
-// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Register a new wholesaler
+// @route   POST /api/wholesalers/register
+// @access  Public
 exports.registerWholeSaler = async (req, res) => {
   try {
     const { storeName, email, pin, phoneNumber, city, address } = req.body;
 
-    // Validate
-    if (!storeName || !email || !pin || !phoneNumber || !city || !address) {
-      return res.status(400).json({ message: "All fields are required" });
+    // Check if wholesaler already exists
+    const existingWholesaler = await WholeSaler.findOne({
+      $or: [{ email }, { phoneNumber }, { storeName }],
+    });
+    if (existingWholesaler) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Wholesaler already exists with this email, phone number, or store name",
+      });
     }
 
-    // Check existing email
-    const existingEmail = await WholeSaler.findOne({ email });
-    if (existingEmail) {
-      return res.status(400).json({ message: "Email already registered" });
-    }
-
-    // Check existing phone number
-    const existingPhone = await WholeSaler.findOne({ phoneNumber });
-    if (existingPhone) {
-      return res
-        .status(400)
-        .json({ message: "Phone number already registered" });
-    }
-
-    // Create wholesaler with plain text PIN
+    // Create wholesaler
     const wholesaler = await WholeSaler.create({
       storeName,
       email,
-      pin: pin, // Store PIN as plain text
+      pin,
       phoneNumber,
       city,
       address,
     });
 
+    // Generate token
+    const token = generateToken(wholesaler._id);
+
     res.status(201).json({
       success: true,
       message: "Wholesaler registered successfully",
-      token: generateToken(wholesaler._id),
+      token,
       wholesaler: {
-        id: wholesaler._id,
+        _id: wholesaler._id,
         storeName: wholesaler.storeName,
         email: wholesaler.email,
         pin: wholesaler.pin,
@@ -59,152 +55,239 @@ exports.registerWholeSaler = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Register Wholesaler Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ LOGIN WHOLESALER (Direct PIN comparison - no bcrypt)
-// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Login wholesaler
+// @route   POST /api/wholesalers/login
+// @access  Public
 exports.loginWholeSaler = async (req, res) => {
   try {
-    const { phoneNumber, pin } = req.body;
+    const { email, pin } = req.body;
 
-    if (!phoneNumber || !pin) {
-      return res
-        .status(400)
-        .json({ message: "Phone number and PIN required" });
-    }
-
-    // Find wholesaler using phone number
-    const wholesaler = await WholeSaler.findOne({ phoneNumber });
-
+    // Check if wholesaler exists
+    const wholesaler = await WholeSaler.findOne({ email });
     if (!wholesaler) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or PIN",
+      });
     }
 
-    // Compare PIN
+    // Check PIN
     if (wholesaler.pin !== pin) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or PIN",
+      });
     }
+
+    // Generate token
+    const token = generateToken(wholesaler._id);
 
     res.status(200).json({
       success: true,
       message: "Login successful",
-      token: generateToken(wholesaler._id),
+      token,
       wholesaler: {
-        id: wholesaler._id,
+        _id: wholesaler._id,
         storeName: wholesaler.storeName,
         email: wholesaler.email,
+        pin: wholesaler.pin,
         phoneNumber: wholesaler.phoneNumber,
         city: wholesaler.city,
         address: wholesaler.address,
       },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Login Wholesaler Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ GET ALL WHOLESALERS (Shows plain text PIN)
-// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Get all wholesalers
+// @route   GET /api/wholesalers
+// @access  Public/Admin
 exports.getAllWholesalers = async (req, res) => {
   try {
-    const wholesalers = await WholeSaler.find({});
+    const wholesalers = await WholeSaler.find({})
+      .select("-__v")
+      .sort({ createdAt: -1 });
+
     res.status(200).json({
       success: true,
       count: wholesalers.length,
-      data: wholesalers, // This includes the plain text PIN and phoneNumber
+      wholesalers,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Get All Wholesalers Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ GET WHOLESALER BY ID (Shows plain text PIN)
-// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Get wholesaler by ID
+// @route   GET /api/wholesalers/:id
+// @access  Private/Admin
 exports.getWholesalerById = async (req, res) => {
   try {
-    const wholesaler = await WholeSaler.findById(req.params.id);
+    const wholesaler = await WholeSaler.findById(req.params.id).select("-__v");
 
     if (!wholesaler) {
-      return res.status(404).json({ message: "Wholesaler not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Wholesaler not found",
+      });
     }
 
     res.status(200).json({
       success: true,
-      data: wholesaler,
+      wholesaler,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Get Wholesaler By ID Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ UPDATE WHOLESALER
-// ─────────────────────────────────────────────────────────────────────────────
-exports.updateWholesaler = async (req, res) => {
+// @desc    Get current logged in wholesaler
+// @route   GET /api/wholesalers/me
+// @access  Private
+exports.getCurrentWholesaler = async (req, res) => {
   try {
-    const { storeName, city, address, pin, phoneNumber } = req.body;
-    const updateData = { storeName, city, address, phoneNumber };
-
-    // Update PIN directly if provided (no hashing)
-    if (pin) {
-      updateData.pin = pin;
-    }
-
-    const wholesaler = await WholeSaler.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true },
-    );
+    const wholesaler = await WholeSaler.findById(req.user._id).select("-__v");
 
     if (!wholesaler) {
-      return res.status(404).json({ message: "Wholesaler not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Wholesaler not found",
+      });
     }
+
+    res.status(200).json({
+      success: true,
+      wholesaler,
+    });
+  } catch (error) {
+    console.error("Get Current Wholesaler Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Update wholesaler
+// @route   PUT /api/wholesalers/:id
+// @access  Private/Admin
+exports.updateWholesaler = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    // Check if wholesaler exists
+    const wholesaler = await WholeSaler.findById(id);
+    if (!wholesaler) {
+      return res.status(404).json({
+        success: false,
+        message: "Wholesaler not found",
+      });
+    }
+
+    // Check for duplicate email/phone/storeName if being updated
+    if (updates.email && updates.email !== wholesaler.email) {
+      const existingEmail = await WholeSaler.findOne({ email: updates.email });
+      if (existingEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Email already in use",
+        });
+      }
+    }
+
+    if (updates.phoneNumber && updates.phoneNumber !== wholesaler.phoneNumber) {
+      const existingPhone = await WholeSaler.findOne({
+        phoneNumber: updates.phoneNumber,
+      });
+      if (existingPhone) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone number already in use",
+        });
+      }
+    }
+
+    if (updates.storeName && updates.storeName !== wholesaler.storeName) {
+      const existingStore = await WholeSaler.findOne({
+        storeName: updates.storeName,
+      });
+      if (existingStore) {
+        return res.status(400).json({
+          success: false,
+          message: "Store name already in use",
+        });
+      }
+    }
+
+    // Update wholesaler
+    const updatedWholesaler = await WholeSaler.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    }).select("-__v");
 
     res.status(200).json({
       success: true,
       message: "Wholesaler updated successfully",
-      data: wholesaler,
+      wholesaler: updatedWholesaler,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Update Wholesaler Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ DELETE WHOLESALER
-// ─────────────────────────────────────────────────────────────────────────────
+// @desc    Delete wholesaler
+// @route   DELETE /api/wholesalers/:id
+// @access  Private/Admin
 exports.deleteWholesaler = async (req, res) => {
   try {
-    const wholesaler = await WholeSaler.findByIdAndDelete(req.params.id);
+    const { id } = req.params;
 
+    const wholesaler = await WholeSaler.findById(id);
     if (!wholesaler) {
-      return res.status(404).json({ message: "Wholesaler not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Wholesaler not found",
+      });
     }
+
+    await wholesaler.deleteOne();
 
     res.status(200).json({
       success: true,
       message: "Wholesaler deleted successfully",
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ GET CURRENT WHOLESALER (from token)
-// ─────────────────────────────────────────────────────────────────────────────
-exports.getCurrentWholesaler = async (req, res) => {
-  try {
-    res.status(200).json({
-      success: true,
-      data: req.wholesaler,
+    console.error("Delete Wholesaler Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
     });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
   }
 };

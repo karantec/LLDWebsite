@@ -70,7 +70,7 @@ app.use("/api/cart", Cart);
 app.use("/api/order", Order);
 app.use("/api/complaint", ComplaintSetting);
 app.use("/api/payment", paymentRoutes);
-app.use("/api/wholesaler", WholeSalerRoutes);
+app.use("/api/wholesalers", WholeSalerRoutes);
 
 /* =======================
    🔥 ADD THIS: Route Listing API (DEV ONLY)

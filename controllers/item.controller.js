@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 const Product = require("../models/Product.model");
 const Category = require("../models/Category.model");
 const SubCategory = require("../models/subCategory.model");
+
+const WholeSaler = require("../models/WholeSaler.model");
 const populateFields = [
   { path: "category", select: "name" },
   {
@@ -165,9 +167,13 @@ exports.createProduct = async (req, res) => {
     const data = req.body;
 
     // Required fields
-    const missing = ["name", "category", "subCategory", "price"].filter(
-      (f) => !data[f],
-    );
+    const missing = [
+      "name",
+      "category",
+      "subCategory",
+      "price",
+      "WholeSaler",
+    ].filter((f) => !data[f]);
     if (missing.length) {
       return res
         .status(400)
@@ -190,6 +196,19 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ message: "SubCategory not found" });
     }
 
+    // ✅ WholeSaler validation - Check if the provided wholesaler ID exists
+    if (!mongoose.Types.ObjectId.isValid(data.WholeSaler)) {
+      return res.status(400).json({ message: "Invalid WholeSaler ID" });
+    }
+    const wholesaler = await WholeSaler.findById(data.WholeSaler);
+    if (!wholesaler) {
+      return res.status(400).json({ message: "WholeSaler not found" });
+    }
+
+    // Optional: Set wholesaler prices based on wholesaler data
+    // You can add logic here to auto-populate wholeSalerDefault and wholeSalerPrice
+    // based on the selected wholesaler's pricing rules
+
     // Customizations
     if (data.customizations) {
       data.customizations = normalizeCustomizations(data.customizations);
@@ -210,7 +229,8 @@ exports.createProduct = async (req, res) => {
     const product = await Product.create(data);
     const populated = await Product.findById(product._id)
       .populate("category", "name")
-      .populate("subCategory", "name");
+      .populate("subCategory", "name")
+      .populate("WholeSaler", "storeName email pin phoneNumber");
 
     return res.status(201).json({
       success: true,
@@ -222,7 +242,6 @@ exports.createProduct = async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 };
-
 // ─────────────────────────────────────────────────────────────────────────────
 // 🔹 GET ALL PRODUCTS
 // ─────────────────────────────────────────────────────────────────────────────
