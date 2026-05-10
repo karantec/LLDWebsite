@@ -20,6 +20,7 @@ const cartItemSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         auto: true,
       },
+      designId: { type: String }, // 🔥 ADD THIS
       config: { type: Object, default: {} },
       quantity: { type: Number, default: 1 },
       offers: { type: Array, default: [] },
