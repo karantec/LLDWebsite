@@ -99,6 +99,7 @@ const addToCart = async (req, res) => {
           cart.items[index].designs.push(designWithOffers);
         }
       });
+
     } else {
       cart.items.push({
         productId: product._id,
@@ -113,7 +114,9 @@ const addToCart = async (req, res) => {
         })),
       });
     }
-
+    cart.items[index].designs = cart.items[index].designs.filter(d =>
+  normalizedConfigs.some(c => c.designId && c.designId === d._id.toString())
+);
     await cart.save();
 
     res.status(200).json({
