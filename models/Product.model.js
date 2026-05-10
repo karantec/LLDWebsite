@@ -34,24 +34,11 @@ const customizationSchema = new mongoose.Schema(
       required: true,
     },
 
-    /**
-     * Replaces the old `options: [String]` array.
-     * Each entry is now { label, priceAdjustment }.
-     *
-     * For "text" / "textarea" / "file" types this stays empty ([]).
-     * For "radio" / "checkbox" / "dropdown" every choice gets its own delta.
-     */
     options: { type: [optionSchema], default: [] },
-
     placeholder: { type: String, default: "" },
-
     required: { type: Boolean, default: false },
     multiple: { type: Boolean, default: false },
-
-    // Cloudinary URLs for file/image uploads
     files: { type: [String], default: [] },
-
-    // Stored value for non-file fields (Mixed keeps flexibility)
     value: { type: mongoose.Schema.Types.Mixed, default: null },
 
     showIf: {
@@ -99,7 +86,7 @@ const offerSchema = new mongoose.Schema(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔹 WHOLESALER PRICE SCHEMA — For multiple wholesaler pricing
+// 🔹 WHOLESALER PRICE SCHEMA — Each wholesaler gets their own wholesale price
 // ─────────────────────────────────────────────────────────────────────────────
 const wholesalerPriceSchema = new mongoose.Schema(
   {
@@ -108,7 +95,6 @@ const wholesalerPriceSchema = new mongoose.Schema(
       ref: "WholeSaler",
       required: true,
     },
-    defaultPrice: { type: Number, required: true, default: 0 },
     wholesalePrice: { type: Number, required: true, default: 0 },
   },
   { _id: false },
@@ -146,24 +132,15 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
 
-    // 💰 Pricing
+    // 💰 Pricing - Single Default Price (MRP)
     price: { type: Number, required: true },
     originalPrice: { type: Number, default: null },
-    discount: { type: Number, default: 0 },
-    discountedMRP: { type: Number, default: null },
-    amountSaving: { type: Number, default: null },
 
-    // � wholesale pricing - NEW: Support for multiple wholesalers
+    // � wholesale pricing - Each wholesaler gets their own price
     wholesalerPrices: { type: [wholesalerPriceSchema], default: [] },
 
-    // ⚠️ DEPRECATED: These fields are kept for backward compatibility
-    // Will be removed in future version. Use wholesalerPrices instead.
-    WholeSaler: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "WholeSaler",
-      required: false,
-    },
-    wholeSalerDefault: { type: Number, default: 0 },
+    // ⚠️ DEPRECATED: Kept for backward compatibility (will be removed)
+    WholeSaler: { type: mongoose.Schema.Types.ObjectId, ref: "WholeSaler" },
     wholeSalerPrice: { type: Number, default: 0 },
 
     // 📦 Stock
@@ -193,7 +170,7 @@ const productSchema = new mongoose.Schema(
     popular: { type: Boolean, default: false },
     active: { type: Boolean, default: true },
 
-    // 🎯 Customizations (each option now has its own priceAdjustment)
+    // 🎯 Customizations
     customizations: { type: [customizationSchema], default: [] },
 
     // 🧩 Extra flexible data
@@ -207,55 +184,11 @@ const productSchema = new mongoose.Schema(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔹 AUTO CALCULATE PRICING (from base price only — customization deltas are
-//    computed at order/cart time, not stored on the product itself)
-// ─────────────────────────────────────────────────────────────────────────────
-productSchema.pre("save", function (next) {
-  if (this.originalPrice && this.price) {
-    this.discount = Math.round(
-      ((this.originalPrice - this.price) / this.originalPrice) * 100,
-    );
-    this.amountSaving = this.originalPrice - this.price;
-    this.discountedMRP = this.price;
-  }
-  next();
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 🔹 INSTANCE METHOD — compute final price from selected option labels
-//
-//    Usage (e.g. in your order/cart controller):
-//      const product = await Product.findById(id);
-//      const finalPrice = product.computeFinalPrice({
-//        size:     'XL',          // radio / dropdown
-//        addons:   ['Gift wrap', 'Express delivery'],  // checkbox (multiple)
-//      });
-// ─────────────────────────────────────────────────────────────────────────────
-productSchema.methods.computeFinalPrice = function (selectedOptions = {}) {
-  let total = this.price;
-
-  for (const customization of this.customizations) {
-    const chosen = selectedOptions[customization.id];
-    if (!chosen) continue;
-
-    const chosenArray = Array.isArray(chosen) ? chosen : [chosen];
-
-    for (const chosenLabel of chosenArray) {
-      const match = customization.options.find((o) => o.label === chosenLabel);
-      if (match) total += match.priceAdjustment;
-    }
-  }
-
-  return Math.max(0, total); // never go below 0
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 INSTANCE METHOD — Get wholesale price for a specific wholesaler
 //
 //    Usage:
 //      const product = await Product.findById(id);
 //      const wholesalePrice = product.getWholesalePrice(wholesalerId);
-//      console.log(wholesalePrice); // { defaultPrice: 1000, wholesalePrice: 800 }
 // ─────────────────────────────────────────────────────────────────────────────
 productSchema.methods.getWholesalePrice = function (wholesalerId) {
   // Check in new wholesalerPrices array
@@ -264,21 +197,15 @@ productSchema.methods.getWholesalePrice = function (wholesalerId) {
   );
 
   if (wholesalerPrice) {
-    return {
-      defaultPrice: wholesalerPrice.defaultPrice,
-      wholesalePrice: wholesalerPrice.wholesalePrice,
-    };
+    return wholesalerPrice.wholesalePrice;
   }
 
-  // Fallback to deprecated fields for backward compatibility
+  // Fallback to deprecated field for backward compatibility
   if (
     this.WholeSaler &&
     this.WholeSaler.toString() === wholesalerId.toString()
   ) {
-    return {
-      defaultPrice: this.wholeSalerDefault,
-      wholesalePrice: this.wholeSalerPrice,
-    };
+    return this.wholeSalerPrice;
   }
 
   return null;
@@ -290,7 +217,7 @@ productSchema.methods.getWholesalePrice = function (wholesalerId) {
 //    Usage:
 //      const product = await Product.findById(id);
 //      const allPrices = product.getAllWholesalerPrices();
-//      // Returns array of { wholesalerId, defaultPrice, wholesalePrice }
+//      // Returns array of { wholesalerId, wholesalePrice }
 // ─────────────────────────────────────────────────────────────────────────────
 productSchema.methods.getAllWholesalerPrices = function () {
   if (this.wholesalerPrices && this.wholesalerPrices.length > 0) {
@@ -302,7 +229,6 @@ productSchema.methods.getAllWholesalerPrices = function () {
     return [
       {
         wholesalerId: this.WholeSaler,
-        defaultPrice: this.wholeSalerDefault,
         wholesalePrice: this.wholeSalerPrice,
       },
     ];
@@ -316,12 +242,11 @@ productSchema.methods.getAllWholesalerPrices = function () {
 //
 //    Usage:
 //      const product = await Product.findById(id);
-//      product.setWholesalerPrice(wholesalerId, 1000, 800);
+//      product.setWholesalerPrice(wholesalerId, 800);
 //      await product.save();
 // ─────────────────────────────────────────────────────────────────────────────
 productSchema.methods.setWholesalerPrice = function (
   wholesalerId,
-  defaultPrice,
   wholesalePrice,
 ) {
   const existingIndex = this.wholesalerPrices.findIndex(
@@ -330,13 +255,11 @@ productSchema.methods.setWholesalerPrice = function (
 
   if (existingIndex >= 0) {
     // Update existing
-    this.wholesalerPrices[existingIndex].defaultPrice = defaultPrice;
     this.wholesalerPrices[existingIndex].wholesalePrice = wholesalePrice;
   } else {
     // Add new
     this.wholesalerPrices.push({
       wholesalerId,
-      defaultPrice,
       wholesalePrice,
     });
   }
@@ -357,6 +280,36 @@ productSchema.methods.removeWholesalerPrice = function (wholesalerId) {
     (wp) => wp.wholesalerId.toString() !== wholesalerId.toString(),
   );
   return this;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔹 INSTANCE METHOD — Get savings for wholesaler
+//
+//    Usage:
+//      const savings = product.getWholesalerSavings(wholesalerId);
+//      // Returns amount saved compared to MRP
+// ─────────────────────────────────────────────────────────────────────────────
+productSchema.methods.getWholesalerSavings = function (wholesalerId) {
+  const wholesalePrice = this.getWholesalePrice(wholesalerId);
+  if (wholesalePrice && this.price) {
+    return this.price - wholesalePrice;
+  }
+  return 0;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔹 INSTANCE METHOD — Get discount percentage for wholesaler
+//
+//    Usage:
+//      const discount = product.getWholesalerDiscount(wholesalerId);
+//      // Returns discount percentage compared to MRP
+// ─────────────────────────────────────────────────────────────────────────────
+productSchema.methods.getWholesalerDiscount = function (wholesalerId) {
+  const wholesalePrice = this.getWholesalePrice(wholesalerId);
+  if (wholesalePrice && this.price && this.price > 0) {
+    return (((this.price - wholesalePrice) / this.price) * 100).toFixed(2);
+  }
+  return 0;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -383,13 +336,20 @@ productSchema.statics.findByWholesaler = function (wholesalerId) {
 productSchema.statics.findByWholesalePriceRange = function (
   minPrice,
   maxPrice,
+  wholesalerId,
 ) {
-  return this.find({
-    $or: [
-      { "wholesalerPrices.wholesalePrice": { $gte: minPrice, $lte: maxPrice } },
-      { wholeSalerPrice: { $gte: minPrice, $lte: maxPrice } },
-    ],
-  });
+  const query = {
+    "wholesalerPrices.wholesalePrice": { $gte: minPrice, $lte: maxPrice },
+  };
+
+  if (wholesalerId) {
+    query["wholesalerPrices.wholesalerId"] = wholesalerId;
+  }
+
+  return this.find(query).populate(
+    "wholesalerPrices.wholesalerId",
+    "storeName pin city",
+  );
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -405,10 +365,32 @@ productSchema.virtual("wholesalerCount").get(function () {
 productSchema.virtual("formattedWholesalerPrices").get(function () {
   return this.wholesalerPrices.map((wp) => ({
     wholesalerId: wp.wholesalerId,
-    defaultPrice: `₹${wp.defaultPrice.toLocaleString("en-IN")}`,
+    mrp: `₹${this.price.toLocaleString("en-IN")}`,
     wholesalePrice: `₹${wp.wholesalePrice.toLocaleString("en-IN")}`,
-    discount: `${(((wp.defaultPrice - wp.wholesalePrice) / wp.defaultPrice) * 100).toFixed(1)}%`,
+    savings: `₹${(this.price - wp.wholesalePrice).toLocaleString("en-IN")}`,
+    discount: `${(((this.price - wp.wholesalePrice) / this.price) * 100).toFixed(1)}%`,
   }));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔹 VIRTUAL — Get best wholesale price among all wholesalers
+// ─────────────────────────────────────────────────────────────────────────────
+productSchema.virtual("bestWholesalePrice").get(function () {
+  if (this.wholesalerPrices.length === 0) return null;
+
+  const bestPrice = Math.min(
+    ...this.wholesalerPrices.map((wp) => wp.wholesalePrice),
+  );
+  const bestWholesaler = this.wholesalerPrices.find(
+    (wp) => wp.wholesalePrice === bestPrice,
+  );
+
+  return {
+    wholesalePrice: bestPrice,
+    wholesalerId: bestWholesaler?.wholesalerId,
+    savings: this.price - bestPrice,
+    discount: (((this.price - bestPrice) / this.price) * 100).toFixed(2),
+  };
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
