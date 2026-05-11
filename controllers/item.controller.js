@@ -42,14 +42,12 @@ const validateCustomizations = (customizations) => {
       return `Invalid customization type: ${c.type}`;
     }
 
-    // ✅ Options validation for choice-based types
     if (["radio", "checkbox", "dropdown"].includes(c.type)) {
       if (!c.options || c.options.length === 0) {
         return `Options required for ${c.type} in "${c.label}"`;
       }
 
       for (const opt of c.options) {
-        // Each option must be { label, priceAdjustment }
         if (
           !opt.label ||
           typeof opt.label !== "string" ||
@@ -67,7 +65,6 @@ const validateCustomizations = (customizations) => {
       }
     }
 
-    // ✅ File validation
     if (c.type === "file") {
       if (c.required && (!c.files || c.files.length === 0)) {
         return `"${c.label}" is required`;
@@ -77,7 +74,6 @@ const validateCustomizations = (customizations) => {
       }
     }
 
-    // ✅ Value validation for non-file types
     if (c.type !== "file") {
       if (c.required && (c.value === null || c.value === "")) {
         return `"${c.label}" is required`;
@@ -90,8 +86,6 @@ const validateCustomizations = (customizations) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 🔹 NORMALIZE CUSTOMIZATIONS
-//    • Ensures options are always { label, priceAdjustment }
-//    • Accepts legacy plain-string options and auto-converts them
 // ─────────────────────────────────────────────────────────────────────────────
 const normalizeCustomizations = (customizations) => {
   return customizations.map((c) => ({
@@ -99,7 +93,6 @@ const normalizeCustomizations = (customizations) => {
     files: c.files || [],
     value: c.value ?? null,
     options: (c.options || []).map((opt) => {
-      // Legacy support: if opt is a plain string, convert it
       if (typeof opt === "string") {
         return { label: opt, priceAdjustment: 0 };
       }
@@ -113,8 +106,7 @@ const normalizeCustomizations = (customizations) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔹 COMPUTE FINAL PRICE (helper for order/cart use)
-//    selectedOptions: { [customizationId]: string | string[] }
+// 🔹 COMPUTE FINAL PRICE
 // ─────────────────────────────────────────────────────────────────────────────
 const computeFinalPrice = (product, selectedOptions = {}) => {
   let total = product.price;
@@ -135,12 +127,31 @@ const computeFinalPrice = (product, selectedOptions = {}) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 🔹 CALCULATE DISCOUNT HELPER
+// ─────────────────────────────────────────────────────────────────────────────
+const calculateDiscount = (originalPrice, currentPrice) => {
+  if (originalPrice && currentPrice && currentPrice <= originalPrice) {
+    return {
+      discount: Math.round(
+        ((originalPrice - currentPrice) / originalPrice) * 100,
+      ),
+      amountSaving: originalPrice - currentPrice,
+      discountedMRP: currentPrice,
+    };
+  }
+  return {
+    discount: 0,
+    amountSaving: 0,
+    discountedMRP: currentPrice || 0,
+  };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 GET PRODUCTS BY SUBCATEGORIES
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getProductsBySubCategories = async (req, res) => {
   try {
     const { subCategories } = req.query;
-
     const filter = {};
     if (subCategories) {
       filter.subCategory = { $in: subCategories.split(",") };
@@ -172,7 +183,6 @@ exports.createProduct = async (req, res) => {
     const missing = ["name", "category", "subCategory", "price"].filter(
       (f) => !data[f],
     );
-
     if (missing.length) {
       return res
         .status(400)
@@ -195,7 +205,7 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ message: "SubCategory not found" });
     }
 
-    // ✅ Validate wholesaler prices if provided
+    // Validate wholesaler prices
     if (data.wholesalerPrices && data.wholesalerPrices.length > 0) {
       for (const wp of data.wholesalerPrices) {
         if (!mongoose.Types.ObjectId.isValid(wp.wholesalerId)) {
@@ -210,27 +220,6 @@ exports.createProduct = async (req, res) => {
             .json({ message: `Wholesaler not found: ${wp.wholesalerId}` });
         }
       }
-    }
-
-    // Optional: For backward compatibility - if WholeSaler is provided, add to wholesalerPrices
-    if (
-      data.WholeSaler &&
-      (!data.wholesalerPrices || data.wholesalerPrices.length === 0)
-    ) {
-      if (!mongoose.Types.ObjectId.isValid(data.WholeSaler)) {
-        return res.status(400).json({ message: "Invalid WholeSaler ID" });
-      }
-      const wholesaler = await WholeSaler.findById(data.WholeSaler);
-      if (!wholesaler) {
-        return res.status(400).json({ message: "WholeSaler not found" });
-      }
-      // Add to wholesalerPrices array
-      data.wholesalerPrices = [
-        {
-          wholesalerId: data.WholeSaler,
-          wholesalePrice: data.wholeSalerPrice || 0,
-        },
-      ];
     }
 
     // Customizations
@@ -250,14 +239,11 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ message: "Maximum 5 superTags allowed" });
     }
 
-    // Calculate discount and savings if originalPrice exists
-    if (data.originalPrice && data.price && data.price <= data.originalPrice) {
-      data.discount = Math.round(
-        ((data.originalPrice - data.price) / data.originalPrice) * 100,
-      );
-      data.amountSaving = data.originalPrice - data.price;
-      data.discountedMRP = data.price;
-    }
+    // Calculate discount
+    const discountData = calculateDiscount(data.originalPrice, data.price);
+    data.discount = discountData.discount;
+    data.amountSaving = discountData.amountSaving;
+    data.discountedMRP = discountData.discountedMRP;
 
     const product = await Product.create(data);
     const populated = await Product.findById(product._id)
@@ -286,7 +272,6 @@ exports.getAllProducts = async (req, res) => {
   try {
     const { category, subCategory, popular, active, search, wholesalerId } =
       req.query;
-
     const filter = {};
 
     if (category) filter.category = category;
@@ -294,7 +279,6 @@ exports.getAllProducts = async (req, res) => {
     if (popular) filter.popular = popular === "true";
     if (active) filter.active = active === "true";
 
-    // Filter by wholesaler
     if (wholesalerId) {
       filter.$or = [
         { "wholesalerPrices.wholesalerId": wholesalerId },
@@ -309,7 +293,6 @@ exports.getAllProducts = async (req, res) => {
       ];
     }
 
-    // ✅ FETCH WITH POPULATE
     const [products, total] = await Promise.all([
       Product.find(filter)
         .populate("category", "name")
@@ -319,21 +302,16 @@ exports.getAllProducts = async (req, res) => {
           "storeName pin email phoneNumber city",
         )
         .sort({ createdAt: -1 }),
-
       Product.countDocuments(filter),
     ]);
 
-    // ✅ TRANSFORM RESPONSE
     const updatedProducts = products.map((p) => {
       const subCat = p.subCategory || {};
-
-      // Calculate best wholesale price
       let bestWholesalePrice = null;
       if (p.wholesalerPrices && p.wholesalerPrices.length > 0) {
-        const bestPrice = Math.min(
+        bestWholesalePrice = Math.min(
           ...p.wholesalerPrices.map((wp) => wp.wholesalePrice),
         );
-        bestWholesalePrice = bestPrice;
       }
 
       return {
@@ -389,8 +367,6 @@ exports.getProductById = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 🔹 COMPUTE PRICE ENDPOINT
-//    POST /api/products/:id/compute-price
-//    Body: { selectedOptions: { [customizationId]: string | string[] } }
 // ─────────────────────────────────────────────────────────────────────────────
 exports.computePrice = async (req, res) => {
   try {
@@ -422,7 +398,7 @@ exports.computePrice = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔹 UPDATE PRODUCT
+// 🔹 UPDATE PRODUCT (FIXED)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.updateProduct = async (req, res) => {
   try {
@@ -433,7 +409,7 @@ exports.updateProduct = async (req, res) => {
       return res.status(400).json({ message: "Invalid product ID" });
     }
 
-    // ✅ Validate wholesaler prices if provided
+    // Validate wholesaler prices
     if (data.wholesalerPrices && data.wholesalerPrices.length > 0) {
       for (const wp of data.wholesalerPrices) {
         if (!mongoose.Types.ObjectId.isValid(wp.wholesalerId)) {
@@ -462,14 +438,17 @@ exports.updateProduct = async (req, res) => {
       return res.status(400).json({ message: "Maximum 5 superTags allowed" });
     }
 
-    // Calculate discount and savings if originalPrice exists
-    if (data.originalPrice && data.price && data.price <= data.originalPrice) {
-      data.discount = Math.round(
-        ((data.originalPrice - data.price) / data.originalPrice) * 100,
-      );
-      data.amountSaving = data.originalPrice - data.price;
-      data.discountedMRP = data.price;
-    }
+    // Calculate discount
+    const discountData = calculateDiscount(data.originalPrice, data.price);
+    data.discount = discountData.discount;
+    data.amountSaving = discountData.amountSaving;
+    data.discountedMRP = discountData.discountedMRP;
+
+    console.log(
+      "Update - Calculated discount:",
+      data.discount,
+      data.amountSaving,
+    );
 
     const product = await Product.findByIdAndUpdate(id, data, {
       new: true,
