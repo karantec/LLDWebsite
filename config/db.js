@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+require("dotenv").config();
 
 const connectDB = async () => {
   try {
@@ -9,15 +10,12 @@ const connectDB = async () => {
     console.log("Attempting to connect to MongoDB...");
 
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      dbName: "test", // force test DB
+      dbName: "LLD",
     });
 
     console.log("✅ MongoDB connected!");
-    console.log("   Host:", conn.connection.host);
-    console.log("   DB:", conn.connection.name);
-    console.log("   Full URI:", conn.connection._connectionString);
+    console.log("Host:", conn.connection.host);
+    console.log("DB:", conn.connection.name);
 
     return conn;
   } catch (error) {

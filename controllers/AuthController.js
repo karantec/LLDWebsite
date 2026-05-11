@@ -100,17 +100,37 @@ const adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const adminUser = await User.findOne({ email, role: "ADMIN" });
+    console.log("Incoming Email:", email);
+    console.log("Incoming Password:", password);
 
-    if (!adminUser || !(await adminUser.comparePassword(password))) {
-      return res.status(401).json({ message: "Invalid admin credentials" });
+    const adminUser = await User.findOne({
+      email,
+      role: "ADMIN",
+    });
+
+    console.log("Admin Found:", adminUser);
+
+    if (!adminUser) {
+      return res.status(401).json({
+        message: "Admin not found",
+      });
+    }
+
+    const isMatch = await adminUser.comparePassword(password);
+
+    console.log("Password Match:", isMatch);
+
+    if (!isMatch) {
+      return res.status(401).json({
+        message: "Password incorrect",
+      });
     }
 
     const token = jwt.sign({ userId: adminUser._id }, process.env.JWT_SECRET, {
       expiresIn: "8d",
     });
 
-    res.json({
+    res.status(200).json({
       success: true,
       message: "Admin login successful",
       token,
@@ -121,7 +141,11 @@ const adminLogin = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.log(error);
+
+    res.status(500).json({
+      message: error.message,
+    });
   }
 };
 
