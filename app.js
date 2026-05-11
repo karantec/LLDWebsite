@@ -17,15 +17,15 @@ const connectDB = require("./config/db");
    Routes
 ======================= */
 const UserRoutes = require("./routes/Users.routes");
-const Banner = require("./routes/Banner.routes");
-const Category = require("./routes/category.routes");
-const Products = require("./routes/product.routes");
-const ComplaintSetting = require("./routes/Complain.route");
-const SubCategory = require("./routes/subCategory.routes");
-const WholeSalerRoutes = require("./routes/WholeSaler.route");
-const Cart = require("./routes/cart.routes");
-const Coupans = require("./routes/Coupan.routes");
-const testimonialRoutes = require("./routes/Testimonial.route");
+const Banner = require("./routes/Course.routes");
+// const Category = require("./routes/category.routes");
+// const Products = require("./routes/product.routes");
+// const ComplaintSetting = require("./routes/Complain.route");
+// const SubCategory = require("./routes/subCategory.routes");
+// const WholeSalerRoutes = require("./routes/WholeSaler.route");
+// const Cart = require("./routes/cart.routes");
+// const Coupans = require("./routes/Coupan.routes");
+// const testimonialRoutes = require("./routes/Testimonial.route");
 
 const Order = require("./routes/order.routes");
 /* =======================
@@ -58,19 +58,19 @@ app.use((req, res, next) => {
 ======================= */
 app.use("/api/auth", UserRoutes);
 app.use("/api/user", UserRoutes);
-app.use("/api/ads", Banner);
-app.use("/api/category", Category);
-app.use("/api/subcategory", SubCategory);
-app.use("/api/product", Products);
-app.use("/api/offercode", Coupans);
+app.use("/api/course", Banner);
+// app.use("/api/category", Category);
+// app.use("/api/subcategory", SubCategory);
+// app.use("/api/product", Products);
+// app.use("/api/offercode", Coupans);
 
-app.use("/api/testimonials", testimonialRoutes);
-// app.use("/api/vendor", Vendor);
-app.use("/api/cart", Cart);
-app.use("/api/order", Order);
-app.use("/api/complaint", ComplaintSetting);
-app.use("/api/payment", paymentRoutes);
-app.use("/api/wholesalers", WholeSalerRoutes);
+// app.use("/api/testimonials", testimonialRoutes);
+// // app.use("/api/vendor", Vendor);
+// app.use("/api/cart", Cart);
+// app.use("/api/order", Order);
+// app.use("/api/complaint", ComplaintSetting);
+// app.use("/api/payment", paymentRoutes);
+// app.use("/api/wholesalers", WholeSalerRoutes);
 
 /* =======================
    🔥 ADD THIS: Route Listing API (DEV ONLY)
