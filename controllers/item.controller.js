@@ -127,26 +127,6 @@ const computeFinalPrice = (product, selectedOptions = {}) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔹 CALCULATE DISCOUNT HELPER
-// ─────────────────────────────────────────────────────────────────────────────
-const calculateDiscount = (originalPrice, currentPrice) => {
-  if (originalPrice && currentPrice && currentPrice <= originalPrice) {
-    return {
-      discount: Math.round(
-        ((originalPrice - currentPrice) / originalPrice) * 100,
-      ),
-      amountSaving: originalPrice - currentPrice,
-      discountedMRP: currentPrice,
-    };
-  }
-  return {
-    discount: 0,
-    amountSaving: 0,
-    discountedMRP: currentPrice || 0,
-  };
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
 // 🔹 GET PRODUCTS BY SUBCATEGORIES
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getProductsBySubCategories = async (req, res) => {
@@ -179,7 +159,6 @@ exports.createProduct = async (req, res) => {
   try {
     const data = req.body;
 
-    // Required fields
     const missing = ["name", "category", "subCategory", "price"].filter(
       (f) => !data[f],
     );
@@ -189,7 +168,6 @@ exports.createProduct = async (req, res) => {
         .json({ message: `Missing fields: ${missing.join(", ")}` });
     }
 
-    // Category check
     if (!mongoose.Types.ObjectId.isValid(data.category)) {
       return res.status(400).json({ message: "Invalid category ID" });
     }
@@ -197,7 +175,6 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ message: "Category not found" });
     }
 
-    // SubCategory check
     if (!mongoose.Types.ObjectId.isValid(data.subCategory)) {
       return res.status(400).json({ message: "Invalid subCategory ID" });
     }
@@ -205,45 +182,20 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ message: "SubCategory not found" });
     }
 
-    // Validate wholesaler prices
-    if (data.wholesalerPrices && data.wholesalerPrices.length > 0) {
-      for (const wp of data.wholesalerPrices) {
-        if (!mongoose.Types.ObjectId.isValid(wp.wholesalerId)) {
-          return res
-            .status(400)
-            .json({ message: "Invalid wholesaler ID in prices" });
-        }
-        const wholesaler = await WholeSaler.findById(wp.wholesalerId);
-        if (!wholesaler) {
-          return res
-            .status(400)
-            .json({ message: `Wholesaler not found: ${wp.wholesalerId}` });
-        }
-      }
-    }
-
-    // Customizations
+    // ✅ Keep wholesaler prices as they are - no validation
     if (data.customizations) {
       data.customizations = normalizeCustomizations(data.customizations);
       const error = validateCustomizations(data.customizations);
       if (error) return res.status(400).json({ message: error });
     }
 
-    // Media
     if (data.media && !Array.isArray(data.media)) {
       return res.status(400).json({ message: "media must be an array" });
     }
 
-    // SuperTags
     if (data.superTags && data.superTags.length > 5) {
       return res.status(400).json({ message: "Maximum 5 superTags allowed" });
     }
-
-    // Calculate discount
-    const discountData = calculateDiscount(data.originalPrice, data.price);
-    data.discount = discountData.discount;
-    data.amountSaving = discountData.amountSaving;
-    data.discountedMRP = discountData.discountedMRP;
 
     const product = await Product.create(data);
     const populated = await Product.findById(product._id)
@@ -398,7 +350,7 @@ exports.computePrice = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔹 UPDATE PRODUCT (FIXED)
+// 🔹 UPDATE PRODUCT (FIXED - No discount, No wholesaler validation)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.updateProduct = async (req, res) => {
   try {
@@ -409,46 +361,18 @@ exports.updateProduct = async (req, res) => {
       return res.status(400).json({ message: "Invalid product ID" });
     }
 
-    // Validate wholesaler prices
-    if (data.wholesalerPrices && data.wholesalerPrices.length > 0) {
-      for (const wp of data.wholesalerPrices) {
-        if (!mongoose.Types.ObjectId.isValid(wp.wholesalerId)) {
-          return res
-            .status(400)
-            .json({ message: "Invalid wholesaler ID in prices" });
-        }
-        const wholesaler = await WholeSaler.findById(wp.wholesalerId);
-        if (!wholesaler) {
-          return res
-            .status(400)
-            .json({ message: `Wholesaler not found: ${wp.wholesalerId}` });
-        }
-      }
-    }
+    // ✅ IMPORTANT: Keep the existing wholesalerPrices structure
+    // Don't validate or modify wholesaler IDs
 
-    // Customizations
     if (data.customizations) {
       data.customizations = normalizeCustomizations(data.customizations);
       const error = validateCustomizations(data.customizations);
       if (error) return res.status(400).json({ message: error });
     }
 
-    // SuperTags
     if (data.superTags && data.superTags.length > 5) {
       return res.status(400).json({ message: "Maximum 5 superTags allowed" });
     }
-
-    // Calculate discount
-    const discountData = calculateDiscount(data.originalPrice, data.price);
-    data.discount = discountData.discount;
-    data.amountSaving = discountData.amountSaving;
-    data.discountedMRP = discountData.discountedMRP;
-
-    console.log(
-      "Update - Calculated discount:",
-      data.discount,
-      data.amountSaving,
-    );
 
     const product = await Product.findByIdAndUpdate(id, data, {
       new: true,
@@ -602,7 +526,7 @@ exports.toggleProductStatus = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🔹 GET WHOLESALER PRICE FOR PRODUCT
+// 🔹 GET WHOLESALER PRICE FOR PRODUCT (NO DISCOUNT/SAVINGS)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getWholesalerPrice = async (req, res) => {
   try {
@@ -615,21 +539,27 @@ exports.getWholesalerPrice = async (req, res) => {
       return res.status(400).json({ message: "Invalid wholesaler ID" });
     }
 
-    const product = await Product.findById(id);
+    const product = await Product.findById(id).populate(
+      "wholesalerPrices.wholesalerId",
+      "storeName pin city",
+    );
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    const wholesalePrice = product.getWholesalePrice(wholesalerId);
-    const savings = product.getWholesalerSavings(wholesalerId);
-    const discount = product.getWholesalerDiscount(wholesalerId);
+    const wholesalePriceData = product.wholesalerPrices.find(
+      (wp) => wp.wholesalerId._id.toString() === wholesalerId,
+    );
 
     return res.status(200).json({
       success: true,
       productId: id,
       wholesalerId,
       mrp: product.price,
-      wholesalePrice,
-      savings,
-      discount: `${discount}%`,
+      wholesalePrice: wholesalePriceData
+        ? wholesalePriceData.wholesalePrice
+        : null,
+      wholesalerInfo: wholesalePriceData
+        ? wholesalePriceData.wholesalerId
+        : null,
     });
   } catch (error) {
     console.error("Get Wholesaler Price Error:", error);
@@ -663,13 +593,15 @@ exports.updateWholesalerPrice = async (req, res) => {
     product.setWholesalerPrice(wholesalerId, wholesalePrice);
     await product.save();
 
+    const updatedProduct = await Product.findById(id).populate(
+      "wholesalerPrices.wholesalerId",
+      "storeName pin city",
+    );
+
     return res.status(200).json({
       success: true,
       message: "Wholesaler price updated successfully",
-      product: await product.populate(
-        "wholesalerPrices.wholesalerId",
-        "storeName pin city",
-      ),
+      product: updatedProduct,
     });
   } catch (error) {
     console.error("Update Wholesaler Price Error:", error);
