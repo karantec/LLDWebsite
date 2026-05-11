@@ -2,8 +2,8 @@ const mongoose = require("mongoose");
 const Product = require("../models/Product.model");
 const Category = require("../models/Category.model");
 const SubCategory = require("../models/subCategory.model");
-
 const WholeSaler = require("../models/WholeSaler.model");
+
 const populateFields = [
   { path: "category", select: "name" },
   {
@@ -15,6 +15,7 @@ const populateFields = [
     },
   },
 ];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 🔹 VALIDATE CUSTOMIZATIONS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -148,6 +149,7 @@ exports.getProductsBySubCategories = async (req, res) => {
     const products = await Product.find(filter)
       .populate("category", "name")
       .populate("subCategory", "name")
+      .populate("wholesalerPrices.wholesalerId", "storeName pin city")
       .sort({ createdAt: -1 });
 
     return res
@@ -167,13 +169,10 @@ exports.createProduct = async (req, res) => {
     const data = req.body;
 
     // Required fields
-    const missing = [
-      "name",
-      "category",
-      "subCategory",
-      "price",
-      "WholeSaler",
-    ].filter((f) => !data[f]);
+    const missing = ["name", "category", "subCategory", "price"].filter(
+      (f) => !data[f],
+    );
+
     if (missing.length) {
       return res
         .status(400)
@@ -196,18 +195,43 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ message: "SubCategory not found" });
     }
 
-    // ✅ WholeSaler validation - Check if the provided wholesaler ID exists
-    if (!mongoose.Types.ObjectId.isValid(data.WholeSaler)) {
-      return res.status(400).json({ message: "Invalid WholeSaler ID" });
-    }
-    const wholesaler = await WholeSaler.findById(data.WholeSaler);
-    if (!wholesaler) {
-      return res.status(400).json({ message: "WholeSaler not found" });
+    // ✅ Validate wholesaler prices if provided
+    if (data.wholesalerPrices && data.wholesalerPrices.length > 0) {
+      for (const wp of data.wholesalerPrices) {
+        if (!mongoose.Types.ObjectId.isValid(wp.wholesalerId)) {
+          return res
+            .status(400)
+            .json({ message: "Invalid wholesaler ID in prices" });
+        }
+        const wholesaler = await WholeSaler.findById(wp.wholesalerId);
+        if (!wholesaler) {
+          return res
+            .status(400)
+            .json({ message: `Wholesaler not found: ${wp.wholesalerId}` });
+        }
+      }
     }
 
-    // Optional: Set wholesaler prices based on wholesaler data
-    // You can add logic here to auto-populate wholeSalerDefault and wholeSalerPrice
-    // based on the selected wholesaler's pricing rules
+    // Optional: For backward compatibility - if WholeSaler is provided, add to wholesalerPrices
+    if (
+      data.WholeSaler &&
+      (!data.wholesalerPrices || data.wholesalerPrices.length === 0)
+    ) {
+      if (!mongoose.Types.ObjectId.isValid(data.WholeSaler)) {
+        return res.status(400).json({ message: "Invalid WholeSaler ID" });
+      }
+      const wholesaler = await WholeSaler.findById(data.WholeSaler);
+      if (!wholesaler) {
+        return res.status(400).json({ message: "WholeSaler not found" });
+      }
+      // Add to wholesalerPrices array
+      data.wholesalerPrices = [
+        {
+          wholesalerId: data.WholeSaler,
+          wholesalePrice: data.wholeSalerPrice || 0,
+        },
+      ];
+    }
 
     // Customizations
     if (data.customizations) {
@@ -226,11 +250,23 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ message: "Maximum 5 superTags allowed" });
     }
 
+    // Calculate discount and savings if originalPrice exists
+    if (data.originalPrice && data.price && data.price <= data.originalPrice) {
+      data.discount = Math.round(
+        ((data.originalPrice - data.price) / data.originalPrice) * 100,
+      );
+      data.amountSaving = data.originalPrice - data.price;
+      data.discountedMRP = data.price;
+    }
+
     const product = await Product.create(data);
     const populated = await Product.findById(product._id)
       .populate("category", "name")
       .populate("subCategory", "name")
-      .populate("WholeSaler", "storeName email pin phoneNumber");
+      .populate(
+        "wholesalerPrices.wholesalerId",
+        "storeName email pin phoneNumber city",
+      );
 
     return res.status(201).json({
       success: true,
@@ -242,43 +278,14 @@ exports.createProduct = async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 };
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 🔹 GET ALL PRODUCTS
 // ─────────────────────────────────────────────────────────────────────────────
-// exports.getAllProducts = async (req, res) => {
-//   try {
-//     const { category, subCategory, popular, active, search } = req.query;
-
-//     const filter = {};
-//     if (category) filter.category = category;
-//     if (subCategory) filter.subCategory = subCategory;
-//     if (popular) filter.popular = popular === "true";
-//     if (active) filter.active = active === "true";
-
-//     if (search) {
-//       filter.$or = [
-//         { name: { $regex: search, $options: "i" } },
-//         { productName: { $regex: search, $options: "i" } },
-//       ];
-//     }
-
-//     const [products, total] = await Promise.all([
-//       Product.find(filter)
-//         .populate("category", "name")
-//         .populate("subCategory", "name")
-//         .sort({ createdAt: -1 }),
-//       Product.countDocuments(filter),
-//     ]);
-
-//     return res.status(200).json({ success: true, total, data: products });
-//   } catch (error) {
-//     console.error("Get All Products Error:", error);
-//     return res.status(500).json({ message: error.message });
-//   }
-// };
 exports.getAllProducts = async (req, res) => {
   try {
-    const { category, subCategory, popular, active, search } = req.query;
+    const { category, subCategory, popular, active, search, wholesalerId } =
+      req.query;
 
     const filter = {};
 
@@ -286,6 +293,14 @@ exports.getAllProducts = async (req, res) => {
     if (subCategory) filter.subCategory = subCategory;
     if (popular) filter.popular = popular === "true";
     if (active) filter.active = active === "true";
+
+    // Filter by wholesaler
+    if (wholesalerId) {
+      filter.$or = [
+        { "wholesalerPrices.wholesalerId": wholesalerId },
+        { WholeSaler: wholesalerId },
+      ];
+    }
 
     if (search) {
       filter.$or = [
@@ -298,26 +313,38 @@ exports.getAllProducts = async (req, res) => {
     const [products, total] = await Promise.all([
       Product.find(filter)
         .populate("category", "name")
-        .populate("subCategory", "name image section") // 👈 include image
+        .populate("subCategory", "name image section")
+        .populate(
+          "wholesalerPrices.wholesalerId",
+          "storeName pin email phoneNumber city",
+        )
         .sort({ createdAt: -1 }),
 
       Product.countDocuments(filter),
     ]);
 
-    // ✅ TRANSFORM RESPONSE (IMPORTANT)
+    // ✅ TRANSFORM RESPONSE
     const updatedProducts = products.map((p) => {
       const subCat = p.subCategory || {};
 
+      // Calculate best wholesale price
+      let bestWholesalePrice = null;
+      if (p.wholesalerPrices && p.wholesalerPrices.length > 0) {
+        const bestPrice = Math.min(
+          ...p.wholesalerPrices.map((wp) => wp.wholesalePrice),
+        );
+        bestWholesalePrice = bestPrice;
+      }
+
       return {
         ...p._doc,
-
-        // ✅ clean subCategory object
         subCategory: {
           _id: subCat._id,
           name: subCat.name,
           section: subCat.section || null,
-          image: subCat.image || p.media?.[0]?.url || null, // 👈 fallback fix
+          image: subCat.image || p.media?.[0]?.url || null,
         },
+        bestWholesalePrice,
       };
     });
 
@@ -345,7 +372,11 @@ exports.getProductById = async (req, res) => {
 
     const product = await Product.findById(id)
       .populate("category", "name")
-      .populate("subCategory", "name");
+      .populate("subCategory", "name")
+      .populate(
+        "wholesalerPrices.wholesalerId",
+        "storeName pin email phoneNumber city",
+      );
 
     if (!product) return res.status(404).json({ message: "Product not found" });
 
@@ -381,7 +412,7 @@ exports.computePrice = async (req, res) => {
       success: true,
       basePrice,
       finalPrice,
-      adjustment: delta, // total +/- applied
+      adjustment: delta,
       adjustmentLabel: delta >= 0 ? `+₹${delta}` : `-₹${Math.abs(delta)}`,
     });
   } catch (error) {
@@ -402,6 +433,23 @@ exports.updateProduct = async (req, res) => {
       return res.status(400).json({ message: "Invalid product ID" });
     }
 
+    // ✅ Validate wholesaler prices if provided
+    if (data.wholesalerPrices && data.wholesalerPrices.length > 0) {
+      for (const wp of data.wholesalerPrices) {
+        if (!mongoose.Types.ObjectId.isValid(wp.wholesalerId)) {
+          return res
+            .status(400)
+            .json({ message: "Invalid wholesaler ID in prices" });
+        }
+        const wholesaler = await WholeSaler.findById(wp.wholesalerId);
+        if (!wholesaler) {
+          return res
+            .status(400)
+            .json({ message: `Wholesaler not found: ${wp.wholesalerId}` });
+        }
+      }
+    }
+
     // Customizations
     if (data.customizations) {
       data.customizations = normalizeCustomizations(data.customizations);
@@ -414,12 +462,25 @@ exports.updateProduct = async (req, res) => {
       return res.status(400).json({ message: "Maximum 5 superTags allowed" });
     }
 
+    // Calculate discount and savings if originalPrice exists
+    if (data.originalPrice && data.price && data.price <= data.originalPrice) {
+      data.discount = Math.round(
+        ((data.originalPrice - data.price) / data.originalPrice) * 100,
+      );
+      data.amountSaving = data.originalPrice - data.price;
+      data.discountedMRP = data.price;
+    }
+
     const product = await Product.findByIdAndUpdate(id, data, {
       new: true,
       runValidators: true,
     })
       .populate("category", "name")
-      .populate("subCategory", "name");
+      .populate("subCategory", "name")
+      .populate(
+        "wholesalerPrices.wholesalerId",
+        "storeName pin email phoneNumber city",
+      );
 
     if (!product) return res.status(404).json({ message: "Product not found" });
 
@@ -471,6 +532,7 @@ exports.getProductsByCategory = async (req, res) => {
     const products = await Product.find({ category: categoryId, active: true })
       .populate("category", "name")
       .populate("subCategory", "name")
+      .populate("wholesalerPrices.wholesalerId", "storeName pin city")
       .sort({ rating: -1 });
 
     return res
@@ -499,6 +561,7 @@ exports.getProductsBySubCategory = async (req, res) => {
     })
       .populate("category", "name")
       .populate("subCategory", "name")
+      .populate("wholesalerPrices.wholesalerId", "storeName pin city")
       .sort({ rating: -1 });
 
     return res
@@ -518,6 +581,7 @@ exports.getPopularProducts = async (req, res) => {
     const products = await Product.find({ popular: true, active: true })
       .populate("category", "name")
       .populate("subCategory", "name")
+      .populate("wholesalerPrices.wholesalerId", "storeName pin city")
       .sort({ rating: -1 })
       .limit(10);
 
@@ -554,6 +618,112 @@ exports.toggleProductStatus = async (req, res) => {
     });
   } catch (error) {
     console.error("Toggle Product Status Error:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔹 GET WHOLESALER PRICE FOR PRODUCT
+// ─────────────────────────────────────────────────────────────────────────────
+exports.getWholesalerPrice = async (req, res) => {
+  try {
+    const { id, wholesalerId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid product ID" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(wholesalerId)) {
+      return res.status(400).json({ message: "Invalid wholesaler ID" });
+    }
+
+    const product = await Product.findById(id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    const wholesalePrice = product.getWholesalePrice(wholesalerId);
+    const savings = product.getWholesalerSavings(wholesalerId);
+    const discount = product.getWholesalerDiscount(wholesalerId);
+
+    return res.status(200).json({
+      success: true,
+      productId: id,
+      wholesalerId,
+      mrp: product.price,
+      wholesalePrice,
+      savings,
+      discount: `${discount}%`,
+    });
+  } catch (error) {
+    console.error("Get Wholesaler Price Error:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔹 ADD/UPDATE WHOLESALER PRICE
+// ─────────────────────────────────────────────────────────────────────────────
+exports.updateWholesalerPrice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { wholesalerId, wholesalePrice } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid product ID" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(wholesalerId)) {
+      return res.status(400).json({ message: "Invalid wholesaler ID" });
+    }
+    if (!wholesalePrice || wholesalePrice < 0) {
+      return res
+        .status(400)
+        .json({ message: "Valid wholesale price is required" });
+    }
+
+    const product = await Product.findById(id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    product.setWholesalerPrice(wholesalerId, wholesalePrice);
+    await product.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Wholesaler price updated successfully",
+      product: await product.populate(
+        "wholesalerPrices.wholesalerId",
+        "storeName pin city",
+      ),
+    });
+  } catch (error) {
+    console.error("Update Wholesaler Price Error:", error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔹 REMOVE WHOLESALER PRICE
+// ─────────────────────────────────────────────────────────────────────────────
+exports.removeWholesalerPrice = async (req, res) => {
+  try {
+    const { id, wholesalerId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid product ID" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(wholesalerId)) {
+      return res.status(400).json({ message: "Invalid wholesaler ID" });
+    }
+
+    const product = await Product.findById(id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    product.removeWholesalerPrice(wholesalerId);
+    await product.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Wholesaler price removed successfully",
+    });
+  } catch (error) {
+    console.error("Remove Wholesaler Price Error:", error);
     return res.status(500).json({ message: error.message });
   }
 };
