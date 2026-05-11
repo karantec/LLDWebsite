@@ -291,3 +291,232 @@ exports.deleteWholesaler = async (req, res) => {
     });
   }
 };
+exports.addAddress = async (req, res) => {
+  try {
+    const wholesalerId = req.user._id;
+
+    const {
+      fullName,
+      phoneNumber,
+      pincode,
+      city,
+      state,
+      country,
+      addressLine1,
+      addressLine2,
+      landmark,
+      isDefault,
+    } = req.body;
+
+    const wholesaler = await WholeSaler.findById(wholesalerId);
+
+    if (!wholesaler) {
+      return res.status(404).json({
+        success: false,
+        message: "Wholesaler not found",
+      });
+    }
+
+    // If default address selected remove old default
+    if (isDefault) {
+      wholesaler.addresses.forEach((addr) => {
+        addr.isDefault = false;
+      });
+    }
+
+    wholesaler.addresses.push({
+      fullName,
+      phoneNumber,
+      pincode,
+      city,
+      state,
+      country,
+      addressLine1,
+      addressLine2,
+      landmark,
+      isDefault,
+    });
+
+    await wholesaler.save();
+
+    res.status(201).json({
+      success: true,
+      message: "Address added successfully",
+      addresses: wholesaler.addresses,
+    });
+  } catch (error) {
+    console.error("Add Address Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ===============================
+// Get All Addresses
+// ===============================
+exports.getAddresses = async (req, res) => {
+  try {
+    const wholesaler = await WholeSaler.findById(req.user._id);
+
+    if (!wholesaler) {
+      return res.status(404).json({
+        success: false,
+        message: "Wholesaler not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      addresses: wholesaler.addresses,
+    });
+  } catch (error) {
+    console.error("Get Addresses Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ===============================
+// Update Address
+// ===============================
+exports.updateAddress = async (req, res) => {
+  try {
+    const wholesaler = await WholeSaler.findById(req.user._id);
+
+    if (!wholesaler) {
+      return res.status(404).json({
+        success: false,
+        message: "Wholesaler not found",
+      });
+    }
+
+    const address = wholesaler.addresses.id(req.params.addressId);
+
+    if (!address) {
+      return res.status(404).json({
+        success: false,
+        message: "Address not found",
+      });
+    }
+
+    // Remove previous default
+    if (req.body.isDefault) {
+      wholesaler.addresses.forEach((addr) => {
+        addr.isDefault = false;
+      });
+    }
+
+    Object.keys(req.body).forEach((key) => {
+      address[key] = req.body[key];
+    });
+
+    await wholesaler.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Address updated successfully",
+      addresses: wholesaler.addresses,
+    });
+  } catch (error) {
+    console.error("Update Address Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ===============================
+// Delete Address
+// ===============================
+exports.deleteAddress = async (req, res) => {
+  try {
+    const wholesaler = await WholeSaler.findById(req.user._id);
+
+    if (!wholesaler) {
+      return res.status(404).json({
+        success: false,
+        message: "Wholesaler not found",
+      });
+    }
+
+    const address = wholesaler.addresses.id(req.params.addressId);
+
+    if (!address) {
+      return res.status(404).json({
+        success: false,
+        message: "Address not found",
+      });
+    }
+
+    address.deleteOne();
+
+    await wholesaler.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Address deleted successfully",
+      addresses: wholesaler.addresses,
+    });
+  } catch (error) {
+    console.error("Delete Address Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ===============================
+// Set Default Address
+// ===============================
+exports.setDefaultAddress = async (req, res) => {
+  try {
+    const wholesaler = await WholeSaler.findById(req.user._id);
+
+    if (!wholesaler) {
+      return res.status(404).json({
+        success: false,
+        message: "Wholesaler not found",
+      });
+    }
+
+    wholesaler.addresses.forEach((addr) => {
+      addr.isDefault = false;
+    });
+
+    const address = wholesaler.addresses.id(req.params.addressId);
+
+    if (!address) {
+      return res.status(404).json({
+        success: false,
+        message: "Address not found",
+      });
+    }
+
+    address.isDefault = true;
+
+    await wholesaler.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Default address updated",
+      addresses: wholesaler.addresses,
+    });
+  } catch (error) {
+    console.error("Set Default Address Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

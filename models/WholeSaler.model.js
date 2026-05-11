@@ -1,5 +1,68 @@
 const mongoose = require("mongoose");
 
+const addressSchema = new mongoose.Schema(
+  {
+    fullName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    phoneNumber: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    pincode: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    city: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    state: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    country: {
+      type: String,
+      default: "India",
+    },
+
+    addressLine1: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    addressLine2: {
+      type: String,
+      trim: true,
+    },
+
+    landmark: {
+      type: String,
+      trim: true,
+    },
+
+    isDefault: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
+
 const WholeSalerSchema = new mongoose.Schema(
   {
     storeName: {
@@ -21,7 +84,6 @@ const WholeSalerSchema = new mongoose.Schema(
     pin: {
       type: String,
       required: [true, "PIN is required"],
-      // No hashing - store as plain text
     },
 
     phoneNumber: {
@@ -43,11 +105,7 @@ const WholeSalerSchema = new mongoose.Schema(
       trim: true,
     },
 
-    address: {
-      type: String,
-      required: [true, "Address is required"],
-      trim: true,
-    },
+    addresses: [addressSchema],
   },
   {
     timestamps: true,
