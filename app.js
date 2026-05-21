@@ -18,6 +18,7 @@ const connectDB = require("./config/db");
 ======================= */
 const UserRoutes = require("./routes/Users.routes");
 const Banner = require("./routes/Course.routes");
+const Sheet = require("./routes/Sheet.route");
 // const Category = require("./routes/category.routes");
 // const Products = require("./routes/product.routes");
 // const ComplaintSetting = require("./routes/Complain.route");
@@ -59,6 +60,7 @@ app.use((req, res, next) => {
 app.use("/api/auth", UserRoutes);
 app.use("/api/user", UserRoutes);
 app.use("/api/course", Banner);
+app.use("/api/Sheet", Sheet);
 // app.use("/api/category", Category);
 // app.use("/api/subcategory", SubCategory);
 // app.use("/api/product", Products);
