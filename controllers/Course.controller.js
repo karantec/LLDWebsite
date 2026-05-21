@@ -104,12 +104,44 @@ const deleteCourse = async (req, res) => {
 // ✅ ADD Session
 const addSession = async (req, res) => {
   try {
-    const { sessionNumber, title, subtitle, resources } = req.body;
+    const {
+      sessionNumber,
+      title,
+      subtitle,
+      resources,
+      serialNumber,
+      questionLink,
+      category,
+    } = req.body;
+
+    // Check if serialNumber already exists in any session of this course
+    const existingCourse = await CourseModel.findById(req.params.id);
+    if (existingCourse) {
+      const serialNumberExists = existingCourse.sessions.some(
+        (session) => session.serialNumber === serialNumber,
+      );
+      if (serialNumberExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Serial number already exists in this course",
+        });
+      }
+    }
 
     const course = await CourseModel.findByIdAndUpdate(
       req.params.id,
       {
-        $push: { sessions: { sessionNumber, title, subtitle, resources } },
+        $push: {
+          sessions: {
+            sessionNumber,
+            title,
+            subtitle,
+            resources,
+            serialNumber,
+            questionLink,
+            category,
+          },
+        },
         $inc: { totalSessions: 1 },
       },
       { new: true },
@@ -134,17 +166,46 @@ const addSession = async (req, res) => {
 const updateSession = async (req, res) => {
   try {
     const { courseId, sessionId } = req.params;
-    const { title, subtitle, resources } = req.body;
+    const {
+      title,
+      subtitle,
+      resources,
+      sessionNumber,
+      serialNumber,
+      questionLink,
+      category,
+    } = req.body;
+
+    // Check if new serialNumber conflicts with existing sessions
+    if (serialNumber) {
+      const course = await CourseModel.findById(courseId);
+      if (course) {
+        const serialNumberExists = course.sessions.some(
+          (session) =>
+            session.serialNumber === serialNumber &&
+            session._id.toString() !== sessionId,
+        );
+        if (serialNumberExists) {
+          return res.status(400).json({
+            success: false,
+            message: "Serial number already exists in this course",
+          });
+        }
+      }
+    }
+
+    const updateFields = {};
+    if (title) updateFields["sessions.$.title"] = title;
+    if (subtitle) updateFields["sessions.$.subtitle"] = subtitle;
+    if (resources) updateFields["sessions.$.resources"] = resources;
+    if (sessionNumber) updateFields["sessions.$.sessionNumber"] = sessionNumber;
+    if (serialNumber) updateFields["sessions.$.serialNumber"] = serialNumber;
+    if (questionLink) updateFields["sessions.$.questionLink"] = questionLink;
+    if (category) updateFields["sessions.$.category"] = category;
 
     const course = await CourseModel.findOneAndUpdate(
       { _id: courseId, "sessions._id": sessionId },
-      {
-        $set: {
-          ...(title && { "sessions.$.title": title }),
-          ...(subtitle && { "sessions.$.subtitle": subtitle }),
-          ...(resources && { "sessions.$.resources": resources }),
-        },
-      },
+      { $set: updateFields },
       { new: true },
     );
 
@@ -192,6 +253,35 @@ const deleteSession = async (req, res) => {
   }
 };
 
+// ✅ GET Sessions by Category (Optional utility function)
+const getSessionsByCategory = async (req, res) => {
+  try {
+    const { courseId, category } = req.params;
+
+    const course = await CourseModel.findById(courseId);
+    if (!course) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Course not found" });
+    }
+
+    const filteredSessions = course.sessions.filter(
+      (session) => session.category === category,
+    );
+
+    res.status(200).json({
+      success: true,
+      count: filteredSessions.length,
+      sessions: filteredSessions,
+    });
+  } catch (error) {
+    console.error("Error in getSessionsByCategory:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
 module.exports = {
   createCourse,
   getAllCourses,
@@ -201,4 +291,5 @@ module.exports = {
   addSession,
   updateSession,
   deleteSession,
+  getSessionsByCategory,
 };

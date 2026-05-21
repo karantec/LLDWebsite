@@ -15,14 +15,15 @@ const questionSchema = new mongoose.Schema(
       required: true,
     },
 
-    videoLink: {
-      type: String,
-      required: true,
-    },
-
     category: {
       type: String,
       enum: ["Basic", "Standard", "Non Standard"],
+      //basic -green  standard - green // non standard-red
+      required: true,
+    },
+
+    videoLink: {
+      type: String,
       required: true,
     },
   },

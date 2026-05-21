@@ -14,6 +14,21 @@ const sessionSchema = new mongoose.Schema(
     title: { type: String, required: true }, // "LLD Introduction + Core Concepts"
     subtitle: { type: String }, // "Foundation★ Start Here"
     resources: [resourceSchema], // [{ label, url }]
+    serialNumber: {
+      type: Number,
+      required: true,
+      unique: true,
+    },
+    questionLink: {
+      type: String,
+      required: true,
+    },
+    category: {
+      type: String,
+      enum: ["Basic", "Standard", "Non Standard"],
+      // basic - green, standard - green, non standard - red
+      required: true,
+    },
   },
   { _id: true, timestamps: true },
 );
