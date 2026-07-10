@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
-const paymentRoutes = require("./routes/payment.routes");
+
 const listEndpoints = require("express-list-endpoints");
 require("dotenv").config();
 
@@ -28,7 +28,7 @@ const Sheet = require("./routes/Sheet.route");
 // const Coupans = require("./routes/Coupan.routes");
 // const testimonialRoutes = require("./routes/Testimonial.route");
 
-const Order = require("./routes/order.routes");
+
 /* =======================
    Middleware
 ======================= */
